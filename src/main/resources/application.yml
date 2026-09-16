@@ -1,0 +1,54 @@
+server:
+  port: 8000
+  servlet:
+    context-path: /api
+  reactive:
+    session:
+      cookie:
+        max-age: 300000s
+
+spring:
+  application:
+    name: a-picture-backend
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://localhost:3306/a_picture
+    username: root
+    password: 123456
+
+  redis:
+    host: localhost
+    port: 6379
+    database: 1
+
+  session:
+    store-type: redis
+    timeout: 300000s
+
+
+  servlet:
+    multipart:
+      max-file-size: 10MB
+
+mybatis-plus:
+  configuration:
+    # 下划线转驼峰
+    map-underscore-to-camel-case: false
+    # 开发环境开日志
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+  global-config:
+    db-config:
+      logic-delete-field: deleted
+      logic-delete-value: 1
+      logic-not-delete-value: 0
+
+knife4j:
+  enable: true
+  openapi:
+    title: a-picture-backend接口文档
+    version: 1.0
+    group:
+      default:
+        api-rule: package
+        api-rule-resources:
+          - com.li.apicturebackend.controller
