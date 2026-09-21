@@ -69,10 +69,11 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
         if (pictureId != null) {
             // 修改
             // 判断图片是否存在
-            boolean exists = this.lambdaQuery()
-                    .eq(Picture::getId, pictureId)
-                    .exists();
-            ThrowUtils.throwIf(!exists, ErrorCode.NOT_FOUND_ERROR, "图片不存在");
+            Picture oldPicture = this.getById(pictureId);
+            ThrowUtils.throwIf(oldPicture == null, ErrorCode.NOT_FOUND_ERROR, "图片不存在");
+            // 空间图片只能走空间模块接口，防止公共上传接口绕过空间权限
+            ThrowUtils.throwIf(oldPicture.getSpaceId() != null,
+                    ErrorCode.NO_AUTH_ERROR, "空间图片请使用空间模块接口");
         }
 
         // 上传图片
@@ -119,6 +120,8 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
         String videoName = FileUtil.mainName(multipartFile.getOriginalFilename());
         QueryWrapper<Picture> queryWrapper = new QueryWrapper<>();
         queryWrapper.eq("name", videoName);
+        // 公共 live 图视频只能关联公共图片，避免命中同名空间图片
+        queryWrapper.isNull("spaceId");
         Picture picture = this.getOne(queryWrapper);
         ThrowUtils.throwIf(picture == null, ErrorCode.NOT_FOUND_ERROR, "对应的图不存在");
 
@@ -173,6 +176,8 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
         }
         queryWrapper.eq(ObjUtil.isNotEmpty(id), "id", id);
         queryWrapper.eq(ObjUtil.isNotEmpty(userId), "userId", userId);
+        // 公共图库只查询未归属任何空间的图片，避免私有空间图片泄漏
+        queryWrapper.isNull("spaceId");
         queryWrapper.like(StrUtil.isNotBlank(name), "name", name);
         queryWrapper.like(StrUtil.isNotBlank(introduction), "introduction", introduction);
         queryWrapper.like(StrUtil.isNotBlank(picFormat), "picFormat", picFormat);

@@ -28,7 +28,6 @@ import cn.hutool.core.io.IoUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.bouncycastle.pqc.math.linearalgebra.IntUtils;
 import org.springframework.beans.BeanUtils;
-import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -41,7 +40,7 @@ import java.util.Date;
 import java.util.Random;
 import java.util.concurrent.TimeUnit;
 
-@Controller
+@RestController
 @Slf4j
 @RequestMapping("/picture")
 public class PictureController {
@@ -121,6 +120,8 @@ public class PictureController {
         // 判断是否存在
         Picture oldPicture = pictureService.getById(id);
         ThrowUtils.throwIf(oldPicture == null, ErrorCode.NOT_FOUND_ERROR);
+        // 空间图片只能走空间模块接口，防止绕过空间权限
+        ThrowUtils.throwIf(oldPicture.getSpaceId() != null, ErrorCode.NO_AUTH_ERROR, "空间图片请使用空间模块接口");
         // 仅本人或管理员可删除
         if (!oldPicture.getUserId().equals(loginUser.getId()) && !userService.isAdmin(loginUser)) {
             throw new BusinessException(ErrorCode.NO_AUTH_ERROR);
@@ -149,6 +150,8 @@ public class PictureController {
         long id = pictureUpdateRequest.getId();
         Picture oldPicture = pictureService.getById(id);
         ThrowUtils.throwIf(oldPicture == null, ErrorCode.NOT_FOUND_ERROR);
+        // 空间图片只能走空间模块接口，防止绕过空间权限
+        ThrowUtils.throwIf(oldPicture.getSpaceId() != null, ErrorCode.NO_AUTH_ERROR, "空间图片请使用空间模块接口");
         // 操作数据库
         boolean result = pictureService.updateById(picture);
         ThrowUtils.throwIf(!result, ErrorCode.OPERATION_ERROR);
@@ -178,6 +181,8 @@ public class PictureController {
         // 查询数据库
         Picture picture = pictureService.getById(id);
         ThrowUtils.throwIf(picture == null, ErrorCode.NOT_FOUND_ERROR);
+        // 空间图片只能走空间模块接口，防止绕过空间权限
+        ThrowUtils.throwIf(picture.getSpaceId() != null, ErrorCode.NO_AUTH_ERROR, "空间图片请使用空间模块接口");
         // 获取封装类
         return Result.success(pictureService.getPictureVO(picture));
     }
@@ -230,8 +235,10 @@ public class PictureController {
             return Result.success((Page<LivePictureVO>) cachedResult);
         }
 
-        // 查询数据库
-        Page<Picture> picturePage = pictureService.page(new Page<>(current, size));
+        // 查询数据库（公共图库不包含空间图片）
+        QueryWrapper<Picture> queryWrapper = new QueryWrapper<>();
+        queryWrapper.isNull("spaceId");
+        Page<Picture> picturePage = pictureService.page(new Page<>(current, size), queryWrapper);
         // 缓存结果
         cacheManager.put(pictureQueryRequest, picturePage, 5, 5,TimeUnit.MINUTES);
         // 获取封装类
@@ -258,6 +265,8 @@ public class PictureController {
         long id = pictureEditRequest.getId();
         Picture oldPicture = pictureService.getById(id);
         ThrowUtils.throwIf(oldPicture == null, ErrorCode.NOT_FOUND_ERROR);
+        // 空间图片只能走空间模块接口，防止绕过空间权限
+        ThrowUtils.throwIf(oldPicture.getSpaceId() != null, ErrorCode.NO_AUTH_ERROR, "空间图片请使用空间模块接口");
         // 仅本人或管理员可编辑
         if (!oldPicture.getUserId().equals(loginUser.getId()) && !userService.isAdmin(loginUser)) {
             throw new BusinessException(ErrorCode.NO_AUTH_ERROR);
