@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.li.apicturebackend.model.entity.User;
 import com.li.apicturebackend.model.vo.LivePictureVO;
 import com.li.apicturebackend.model.vo.PictureVO;
+import com.li.apicturebackend.model.dto.space.SpacePictureEditByBatchRequest;
 import com.li.apicturebackend.model.dto.space.SpacePictureEditRequest;
 import com.li.apicturebackend.model.dto.space.SpacePictureQueryRequest;
 import org.springframework.web.multipart.MultipartFile;
@@ -30,6 +31,11 @@ public interface SpacePictureService {
      * 编辑空间图片的元信息，不修改文件本身
      */
     Boolean editPicture(SpacePictureEditRequest spacePictureEditRequest, User loginUser);
+
+    /**
+     * 批量编辑空间图片的分类、标签和名称，只处理属于该空间的图片
+     */
+    Boolean editPictureByBatch(SpacePictureEditByBatchRequest spacePictureEditByBatchRequest, User loginUser);
 
     /**
      * 删除空间图片，同时释放空间配额

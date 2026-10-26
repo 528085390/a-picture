@@ -7,6 +7,7 @@ import cn.hutool.core.util.StrUtil;
 import cn.hutool.json.JSONUtil;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.li.apicturebackend.exception.BusinessException;
 import com.li.apicturebackend.exception.ErrorCode;
 import com.li.apicturebackend.exception.ThrowUtils;
 import com.li.apicturebackend.manager.FileManager;
@@ -22,6 +23,7 @@ import com.li.apicturebackend.model.vo.UserVO;
 import com.li.apicturebackend.service.LiveVideoService;
 import com.li.apicturebackend.service.UserService;
 import com.li.apicturebackend.manager.SpacePermissionHelper;
+import com.li.apicturebackend.model.dto.space.SpacePictureEditByBatchRequest;
 import com.li.apicturebackend.model.dto.space.SpacePictureEditRequest;
 import com.li.apicturebackend.model.dto.space.SpacePictureQueryRequest;
 import com.li.apicturebackend.model.entity.Space;
@@ -186,6 +188,64 @@ public class SpacePictureServiceImpl implements SpacePictureService {
         int rows = pictureMapper.updateById(picture);
         ThrowUtils.throwIf(rows <= 0, ErrorCode.OPERATION_ERROR, "编辑图片失败");
         return true;
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public Boolean editPictureByBatch(SpacePictureEditByBatchRequest spacePictureEditByBatchRequest, User loginUser) {
+        ThrowUtils.throwIf(spacePictureEditByBatchRequest == null, ErrorCode.PARAMS_ERROR);
+        Long spaceId = spacePictureEditByBatchRequest.getSpaceId();
+        List<Long> pictureIdList = spacePictureEditByBatchRequest.getPictureIdList();
+        ThrowUtils.throwIf(spaceId == null || spaceId <= 0, ErrorCode.PARAMS_ERROR, "空间 id 不合法");
+        ThrowUtils.throwIf(CollUtil.isEmpty(pictureIdList), ErrorCode.PARAMS_ERROR, "图片 id 列表不能为空");
+
+        // 先校验空间权限，再放行批量操作
+        spacePermissionHelper.checkSpaceAccess(spaceId, loginUser);
+
+        // 只查 id 和 spaceId，减少数据库开销；其余字段保持 null，批量更新时不会被覆盖成空值
+        List<Picture> pictureList = pictureMapper.selectList(new QueryWrapper<Picture>()
+                .select("id", "spaceId")
+                .eq("spaceId", spaceId)
+                .in("id", pictureIdList));
+        if (CollUtil.isEmpty(pictureList)) {
+            return true;
+        }
+
+        String category = spacePictureEditByBatchRequest.getCategory();
+        List<String> tags = spacePictureEditByBatchRequest.getTags();
+        Date editTime = new Date();
+        pictureList.forEach(picture -> {
+            if (StrUtil.isNotBlank(category)) {
+                picture.setCategory(category);
+            }
+            if (CollUtil.isNotEmpty(tags)) {
+                picture.setTags(JSONUtil.toJsonStr(tags));
+            }
+            picture.setEditTime(editTime);
+        });
+        fillPictureWithNameRule(pictureList, spacePictureEditByBatchRequest.getNameRule());
+
+        // 一次批量提交，避免 for 循环逐条打库
+        pictureMapper.updateById(pictureList);
+        return true;
+    }
+
+    /**
+     * nameRule 格式：图片{序号}，其中 {序号} 会被替换为从 1 开始的递增序号
+     */
+    private void fillPictureWithNameRule(List<Picture> pictureList, String nameRule) {
+        if (CollUtil.isEmpty(pictureList) || StrUtil.isBlank(nameRule)) {
+            return;
+        }
+        try {
+            long count = 1;
+            for (Picture picture : pictureList) {
+                picture.setName(nameRule.replaceAll("\\{序号}", String.valueOf(count++)));
+            }
+        } catch (Exception e) {
+            log.error("名称解析错误", e);
+            throw new BusinessException(ErrorCode.OPERATION_ERROR, "名称解析错误");
+        }
     }
 
     @Override

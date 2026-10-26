@@ -10,6 +10,7 @@ import com.li.apicturebackend.model.entity.User;
 import com.li.apicturebackend.model.vo.LivePictureVO;
 import com.li.apicturebackend.model.vo.PictureVO;
 import com.li.apicturebackend.service.UserService;
+import com.li.apicturebackend.model.dto.space.SpacePictureEditByBatchRequest;
 import com.li.apicturebackend.model.dto.space.SpacePictureEditRequest;
 import com.li.apicturebackend.model.dto.space.SpacePictureQueryRequest;
 import com.li.apicturebackend.model.dto.space.SpacePictureUploadRequest;
@@ -78,6 +79,17 @@ public class SpacePictureController {
         ThrowUtils.throwIf(spacePictureEditRequest == null, ErrorCode.PARAMS_ERROR);
         User loginUser = userService.getLoginUser(request);
         return Result.success(spacePictureService.editPicture(spacePictureEditRequest, loginUser));
+    }
+
+    /**
+     * 批量编辑空间图片（分类、标签、命名规则）
+     */
+    @PostMapping("/edit/batch")
+    public BaseResponse<Boolean> editPictureByBatch(
+            @RequestBody SpacePictureEditByBatchRequest spacePictureEditByBatchRequest, HttpServletRequest request) {
+        ThrowUtils.throwIf(spacePictureEditByBatchRequest == null, ErrorCode.PARAMS_ERROR);
+        User loginUser = userService.getLoginUser(request);
+        return Result.success(spacePictureService.editPictureByBatch(spacePictureEditByBatchRequest, loginUser));
     }
 
     /**
