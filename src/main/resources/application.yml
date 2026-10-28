@@ -52,3 +52,9 @@ knife4j:
         api-rule: package
         api-rule-resources:
           - com.li.apicturebackend.controller
+
+# 阿里云百炼（AI 扩图）
+# apiKey 获取：https://bailian.console.aliyun.com/ 右上角「API-KEY」
+# 留空不影响启动，只是调用 AI 扩图接口时会报「未配置阿里云 AI apiKey」
+aliYunAi:
+  apiKey: ${ALIYUN_AI_API_KEY:}

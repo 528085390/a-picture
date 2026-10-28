@@ -2,6 +2,8 @@ package com.li.apicturebackend.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.li.apicturebackend.api.aliyunai.model.CreateOutPaintingTaskResponse;
+import com.li.apicturebackend.model.dto.picture.CreatePictureOutPaintingTaskRequest;
 import com.li.apicturebackend.model.dto.picture.PictureQueryRequest;
 import com.li.apicturebackend.model.dto.picture.PictureUploadRequest;
 import com.li.apicturebackend.model.entity.Picture;
@@ -56,4 +58,14 @@ public interface PictureService extends IService<Picture> {
      * 分页查看动图，不搜索
      */
     Page<LivePictureVO> getLivePictureVOPage(Page<Picture> picturePage, HttpServletRequest request);
+
+    /**
+     * 创建 AI 扩图任务
+     *
+     * @param createPictureOutPaintingTaskRequest 图片 id + 扩图参数
+     * @param loginUser                           登录用户
+     * @return 任务信息（含 taskId）
+     */
+    CreateOutPaintingTaskResponse createPictureOutPaintingTask(
+            CreatePictureOutPaintingTaskRequest createPictureOutPaintingTaskRequest, User loginUser);
 }

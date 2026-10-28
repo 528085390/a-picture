@@ -7,12 +7,18 @@ import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.li.apicturebackend.api.aliyunai.AliYunAiApi;
+import com.li.apicturebackend.api.aliyunai.model.CreateOutPaintingTaskRequest;
+import com.li.apicturebackend.api.aliyunai.model.CreateOutPaintingTaskResponse;
 import com.li.apicturebackend.config.CosClientConfig;
+import com.li.apicturebackend.exception.BusinessException;
 import com.li.apicturebackend.exception.ErrorCode;
 import com.li.apicturebackend.exception.ThrowUtils;
 import com.li.apicturebackend.manager.FileManager;
+import com.li.apicturebackend.manager.SpacePermissionHelper;
 import com.li.apicturebackend.model.dto.file.UploadLiveVideoResult;
 import com.li.apicturebackend.model.dto.file.UploadPictureResult;
+import com.li.apicturebackend.model.dto.picture.CreatePictureOutPaintingTaskRequest;
 import com.li.apicturebackend.model.dto.picture.PictureQueryRequest;
 import com.li.apicturebackend.model.dto.picture.PictureUploadRequest;
 import com.li.apicturebackend.model.entity.LiveVideo;
@@ -54,6 +60,12 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
 
     @Resource
     private UserService userService;
+
+    @Resource
+    private SpacePermissionHelper spacePermissionHelper;
+
+    @Resource
+    private AliYunAiApi aliYunAiApi;
 
     @Override
     public PictureVO uploadPicture(MultipartFile multipartFile, PictureUploadRequest pictureUploadRequest, User loginUser) {
@@ -275,6 +287,43 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
         return livePictureVOPage;
     }
 
+    @Override
+    public CreateOutPaintingTaskResponse createPictureOutPaintingTask(
+            CreatePictureOutPaintingTaskRequest createPictureOutPaintingTaskRequest, User loginUser) {
+        ThrowUtils.throwIf(createPictureOutPaintingTaskRequest == null
+                || createPictureOutPaintingTaskRequest.getPictureId() == null, ErrorCode.PARAMS_ERROR);
+        // 获取图片信息
+        Long pictureId = createPictureOutPaintingTaskRequest.getPictureId();
+        Picture picture = this.getById(pictureId);
+        ThrowUtils.throwIf(picture == null, ErrorCode.NOT_FOUND_ERROR, "图片不存在");
+        // 权限校验
+        checkPictureAuth(loginUser, picture);
+        // 构造请求参数：图片 url 来自数据库，扩图参数原样透传给阿里云
+        CreateOutPaintingTaskRequest taskRequest = new CreateOutPaintingTaskRequest();
+        CreateOutPaintingTaskRequest.Input input = new CreateOutPaintingTaskRequest.Input();
+        input.setImageUrl(picture.getUrl());
+        taskRequest.setInput(input);
+        taskRequest.setParameters(createPictureOutPaintingTaskRequest.getParameters());
+        // 创建任务
+        return aliYunAiApi.createOutPaintingTask(taskRequest);
+    }
 
+    /**
+     * 图片操作权限校验。
+     * <p>
+     * 空间图片：能访问该空间即可（复用统一的 {@link SpacePermissionHelper}）。
+     * 公共图库图片：仅本人或管理员可操作。
+     */
+    private void checkPictureAuth(User loginUser, Picture picture) {
+        ThrowUtils.throwIf(loginUser == null, ErrorCode.NOT_LOGIN_ERROR, "用户未登录");
+        Long spaceId = picture.getSpaceId();
+        if (spaceId != null) {
+            spacePermissionHelper.checkSpaceAccess(spaceId, loginUser);
+            return;
+        }
+        if (!userService.isAdmin(loginUser) && !loginUser.getId().equals(picture.getUserId())) {
+            throw new BusinessException(ErrorCode.NO_AUTH_ERROR, "无权限操作该图片");
+        }
+    }
 }
 
