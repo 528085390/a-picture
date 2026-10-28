@@ -14,12 +14,15 @@ import com.li.apicturebackend.model.vo.UserVO;
 import com.li.apicturebackend.service.UserService;
 import com.li.apicturebackend.manager.SpacePermissionHelper;
 import com.li.apicturebackend.mapper.SpaceMapper;
+import com.li.apicturebackend.mapper.SpaceUserMapper;
 import com.li.apicturebackend.model.dto.space.SpaceAddRequest;
 import com.li.apicturebackend.model.dto.space.SpaceEditRequest;
 import com.li.apicturebackend.model.dto.space.SpaceQueryRequest;
 import com.li.apicturebackend.model.dto.space.SpaceUpdateRequest;
 import com.li.apicturebackend.model.entity.Space;
+import com.li.apicturebackend.model.entity.SpaceUser;
 import com.li.apicturebackend.model.enums.SpaceLevelEnum;
+import com.li.apicturebackend.model.enums.SpaceRoleEnum;
 import com.li.apicturebackend.model.enums.SpaceTypeEnum;
 import com.li.apicturebackend.model.vo.SpaceVO;
 import com.li.apicturebackend.service.SpaceService;
@@ -71,6 +74,14 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space> implements
     @Resource
     private SpacePermissionHelper spacePermissionHelper;
 
+    /**
+     * 创建团队空间时要顺手把创建人登记成空间管理员。
+     * 这里直接用 Mapper 而不是注入 SpaceUserService —— 后者反过来依赖 SpaceService 做校验，
+     * 互相注入会形成循环依赖（Spring Boot 2.6+ 默认禁止），而这条插入又不需要任何业务校验。
+     */
+    @Resource
+    private SpaceUserMapper spaceUserMapper;
+
     @Override
     public long addSpace(SpaceAddRequest spaceAddRequest, User loginUser) {
         ThrowUtils.throwIf(spaceAddRequest == null, ErrorCode.PARAMS_ERROR);
@@ -88,7 +99,9 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space> implements
         Space space = new Space();
         BeanUtils.copyProperties(spaceAddRequest, space);
         space.setUserId(loginUser.getId());
-        space.setSpaceType(SpaceTypeEnum.PRIVATE.getValue());
+        if (space.getSpaceType() == null) {
+            space.setSpaceType(SpaceTypeEnum.PRIVATE.getValue());
+        }
         space.setStatus(STATUS_NORMAL);
         if (space.getSpaceLevel() == null) {
             space.setSpaceLevel(SpaceLevelEnum.COMMON.getValue());
@@ -103,13 +116,25 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space> implements
         space.setTotalSize(0L);
         space.setTotalCount(0L);
         validSpace(space, true);
-        long count = this.lambdaQuery()
-                .eq(Space::getUserId, loginUser.getId())
-                .eq(Space::getSpaceType, SpaceTypeEnum.PRIVATE.getValue())
-                .count();
-        ThrowUtils.throwIf(count > 0, ErrorCode.OPERATION_ERROR, "每个用户只能创建一个私有空间");
+        // 普通用户每类空间只能创建 1 个（私有 1 个、团队 1 个），管理员不限
+        if (!userService.isAdmin(loginUser)) {
+            long count = this.lambdaQuery()
+                    .eq(Space::getUserId, loginUser.getId())
+                    .eq(Space::getSpaceType, space.getSpaceType())
+                    .count();
+            ThrowUtils.throwIf(count > 0, ErrorCode.OPERATION_ERROR, "每个用户每类空间仅能创建一个");
+        }
         boolean result = this.save(space);
         ThrowUtils.throwIf(!result, ErrorCode.OPERATION_ERROR, "创建空间失败");
+        // 团队空间要把创建人登记成空间管理员，否则连创建人都进不去自己的团队空间
+        if (Objects.equals(space.getSpaceType(), SpaceTypeEnum.TEAM.getValue())) {
+            SpaceUser spaceUser = new SpaceUser();
+            spaceUser.setSpaceId(space.getId());
+            spaceUser.setUserId(loginUser.getId());
+            spaceUser.setSpaceRole(SpaceRoleEnum.ADMIN.getValue());
+            boolean saved = spaceUserMapper.insert(spaceUser) == 1;
+            ThrowUtils.throwIf(!saved, ErrorCode.OPERATION_ERROR, "创建团队成员记录失败");
+        }
         return space.getId();
     }
 
@@ -244,8 +269,14 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space> implements
         Integer spaceLevel = space.getSpaceLevel();
         Long maxSize = space.getMaxSize();
         Long maxCount = space.getMaxCount();
+        Integer spaceType = space.getSpaceType();
         if (add) {
             ThrowUtils.throwIf(StrUtil.isBlank(spaceName), ErrorCode.PARAMS_ERROR, "空间名称不能为空");
+            ThrowUtils.throwIf(spaceType == null, ErrorCode.PARAMS_ERROR, "空间类型不能为空");
+        }
+        // 编辑场景 spaceType 一般是 null，只有显式传了才校验
+        if (spaceType != null && SpaceTypeEnum.getEnumByValue(spaceType) == null) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "空间类型不存在");
         }
         if (!add && spaceName != null && StrUtil.isBlank(spaceName)) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "空间名称不能为空");

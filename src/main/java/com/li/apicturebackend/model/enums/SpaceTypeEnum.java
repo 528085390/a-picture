@@ -27,4 +27,19 @@ public enum SpaceTypeEnum {
         this.desc = desc;
         this.value = value;
     }
+
+    /**
+     * 根据 value 获取枚举
+     */
+    public static SpaceTypeEnum getEnumByValue(Integer value) {
+        if (value == null) {
+            return null;
+        }
+        for (SpaceTypeEnum e : values()) {
+            if (e.getValue() == value) {
+                return e;
+            }
+        }
+        return null;
+    }
 }
