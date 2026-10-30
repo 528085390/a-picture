@@ -70,6 +70,11 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-aop</artifactId>
         </dependency>
+        <!-- WebSocket：图片协同编辑 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-websocket</artifactId>
+        </dependency>
         <!-- Sa-Token 权限认证：只用于团队空间账号体系，user 表角色仍走 @AuthCheck + AOP -->
         <dependency>
             <groupId>cn.dev33</groupId>

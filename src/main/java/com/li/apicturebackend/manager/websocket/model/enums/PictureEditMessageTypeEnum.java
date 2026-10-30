@@ -1,0 +1,39 @@
+package com.li.apicturebackend.manager.websocket.model.enums;
+
+import lombok.Getter;
+
+/**
+ * 图片协同编辑的消息类型
+ */
+@Getter
+public enum PictureEditMessageTypeEnum {
+
+    INFO("发送通知", "INFO"),
+    ERROR("发送错误", "ERROR"),
+    ENTER_EDIT("进入编辑状态", "ENTER_EDIT"),
+    EXIT_EDIT("退出编辑状态", "EXIT_EDIT"),
+    EDIT_ACTION("执行编辑操作", "EDIT_ACTION");
+
+    private final String text;
+    private final String value;
+
+    PictureEditMessageTypeEnum(String text, String value) {
+        this.text = text;
+        this.value = value;
+    }
+
+    /**
+     * 根据 value 获取枚举（注意：入门版用的 {@code valueOf} 遇到脏数据会抛异常，直接把连接打断）
+     */
+    public static PictureEditMessageTypeEnum getEnumByValue(String value) {
+        if (value == null || value.isEmpty()) {
+            return null;
+        }
+        for (PictureEditMessageTypeEnum typeEnum : values()) {
+            if (typeEnum.value.equals(value)) {
+                return typeEnum;
+            }
+        }
+        return null;
+    }
+}

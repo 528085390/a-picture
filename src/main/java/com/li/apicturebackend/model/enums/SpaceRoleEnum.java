@@ -1,5 +1,6 @@
 package com.li.apicturebackend.model.enums;
 
+import com.li.apicturebackend.common.SpaceUserPermissionConstant;
 import lombok.Getter;
 
 import java.util.Arrays;
@@ -18,19 +19,26 @@ public enum SpaceRoleEnum {
     /**
      * 浏览者：仅可查看空间中的图片
      */
-    VIEWER("浏览者", "viewer", Collections.singleton("picture:view")),
+    VIEWER("浏览者", "viewer", Collections.singleton(SpaceUserPermissionConstant.PICTURE_VIEW)),
 
     /**
      * 编辑者：可查看、上传、修改、删除图片
      */
     EDITOR("编辑者", "editor", new LinkedHashSet<>(Arrays.asList(
-            "picture:view", "picture:upload", "picture:edit", "picture:delete"))),
+            SpaceUserPermissionConstant.PICTURE_VIEW,
+            SpaceUserPermissionConstant.PICTURE_UPLOAD,
+            SpaceUserPermissionConstant.PICTURE_EDIT,
+            SpaceUserPermissionConstant.PICTURE_DELETE))),
 
     /**
      * 管理员：拥有管理空间和成员的所有权限
      */
     ADMIN("管理员", "admin", new LinkedHashSet<>(Arrays.asList(
-            "spaceUser:manage", "picture:view", "picture:upload", "picture:edit", "picture:delete")));
+            SpaceUserPermissionConstant.SPACE_USER_MANAGE,
+            SpaceUserPermissionConstant.PICTURE_VIEW,
+            SpaceUserPermissionConstant.PICTURE_UPLOAD,
+            SpaceUserPermissionConstant.PICTURE_EDIT,
+            SpaceUserPermissionConstant.PICTURE_DELETE)));
 
     /**
      * 角色描述
