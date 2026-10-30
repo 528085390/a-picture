@@ -1,5 +1,6 @@
 package com.li.apicturebackend.controller;
 
+import com.li.apicturebackend.annotation.SaSpaceCheckPermission;
 import com.li.apicturebackend.common.BaseResponse;
 import com.li.apicturebackend.common.DeleteRequest;
 import com.li.apicturebackend.common.Result;
@@ -28,8 +29,8 @@ import java.util.List;
 /**
  * 空间成员接口
  * <p>
- * 注意：本阶段的接口还没有接入权限校验，只实现功能。
- * 「仅拥有成员管理权限的用户可用」这条约束在引入 Sa-Token 之后再补上。
+ * 除 /list/my（只查自己）外，其余接口都要求「当前用户在该空间拥有 spaceUser:manage 权限」。
+ * 权限校验走 {@link SaSpaceCheckPermission} + Sa-Token，见 aop/SaSpaceCheckPermissionAspect。
  */
 @RestController
 @RequestMapping("/spaceUser")
@@ -45,6 +46,7 @@ public class SpaceUserController {
     /**
      * 添加成员到空间
      */
+    @SaSpaceCheckPermission("spaceUser:manage")
     @PostMapping("/add")
     public BaseResponse<Long> addSpaceUser(@RequestBody SpaceUserAddRequest spaceUserAddRequest) {
         ThrowUtils.throwIf(spaceUserAddRequest == null, ErrorCode.PARAMS_ERROR);
@@ -54,6 +56,7 @@ public class SpaceUserController {
     /**
      * 从空间移除成员
      */
+    @SaSpaceCheckPermission("spaceUser:manage")
     @PostMapping("/delete")
     public BaseResponse<Boolean> deleteSpaceUser(@RequestBody DeleteRequest deleteRequest) {
         ThrowUtils.throwIf(deleteRequest == null || deleteRequest.getId() == null
@@ -69,6 +72,7 @@ public class SpaceUserController {
     /**
      * 查询某个成员在某个空间的信息
      */
+    @SaSpaceCheckPermission("spaceUser:manage")
     @PostMapping("/get")
     public BaseResponse<SpaceUser> getSpaceUser(@RequestBody SpaceUserQueryRequest spaceUserQueryRequest) {
         ThrowUtils.throwIf(spaceUserQueryRequest == null, ErrorCode.PARAMS_ERROR);
@@ -83,6 +87,7 @@ public class SpaceUserController {
     /**
      * 查询成员信息列表
      */
+    @SaSpaceCheckPermission("spaceUser:manage")
     @PostMapping("/list")
     public BaseResponse<List<SpaceUserVO>> listSpaceUser(@RequestBody SpaceUserQueryRequest spaceUserQueryRequest) {
         ThrowUtils.throwIf(spaceUserQueryRequest == null, ErrorCode.PARAMS_ERROR);
@@ -94,6 +99,7 @@ public class SpaceUserController {
     /**
      * 编辑成员信息（设置权限）
      */
+    @SaSpaceCheckPermission("spaceUser:manage")
     @PostMapping("/edit")
     public BaseResponse<Boolean> editSpaceUser(@RequestBody SpaceUserEditRequest spaceUserEditRequest) {
         ThrowUtils.throwIf(spaceUserEditRequest == null || spaceUserEditRequest.getId() == null

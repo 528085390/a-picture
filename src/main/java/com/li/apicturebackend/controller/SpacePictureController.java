@@ -1,6 +1,7 @@
 package com.li.apicturebackend.controller;
 
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.li.apicturebackend.annotation.SaSpaceCheckPermission;
 import com.li.apicturebackend.common.BaseResponse;
 import com.li.apicturebackend.common.DeleteRequest;
 import com.li.apicturebackend.common.Result;
@@ -28,6 +29,9 @@ import javax.servlet.http.HttpServletRequest;
 
 /**
  * 空间图片接口
+ * <p>
+ * 每个接口都标了 {@link SaSpaceCheckPermission}：先要求已登录，再要求当前用户在该空间拥有对应权限。
+ * 空间所有者与系统管理员视为管理员，拥有全部空间权限。
  */
 @RestController
 @RequestMapping("/space/picture")
@@ -42,6 +46,7 @@ public class SpacePictureController {
     /**
      * 上传图片到空间
      */
+    @SaSpaceCheckPermission("picture:upload")
     @PostMapping("/upload")
     public BaseResponse<PictureVO> uploadPicture(@RequestPart("file") MultipartFile multipartFile,
                                                  SpacePictureUploadRequest spacePictureUploadRequest,
@@ -58,6 +63,7 @@ public class SpacePictureController {
     /**
      * 上传空间内 live 图的配套视频
      */
+    @SaSpaceCheckPermission("picture:upload")
     @PostMapping("/upload/live")
     public BaseResponse<Boolean> uploadLiveVideo(@RequestPart("file") MultipartFile multipartFile,
                                                  SpacePictureUploadRequest spacePictureUploadRequest,
@@ -73,6 +79,7 @@ public class SpacePictureController {
     /**
      * 编辑空间图片
      */
+    @SaSpaceCheckPermission("picture:edit")
     @PostMapping("/edit")
     public BaseResponse<Boolean> editPicture(@RequestBody SpacePictureEditRequest spacePictureEditRequest,
                                              HttpServletRequest request) {
@@ -84,6 +91,7 @@ public class SpacePictureController {
     /**
      * 批量编辑空间图片（分类、标签、命名规则）
      */
+    @SaSpaceCheckPermission("picture:edit")
     @PostMapping("/edit/batch")
     public BaseResponse<Boolean> editPictureByBatch(
             @RequestBody SpacePictureEditByBatchRequest spacePictureEditByBatchRequest, HttpServletRequest request) {
@@ -95,6 +103,7 @@ public class SpacePictureController {
     /**
      * 删除空间图片
      */
+    @SaSpaceCheckPermission("picture:delete")
     @PostMapping("/delete")
     public BaseResponse<Boolean> deletePicture(@RequestBody DeleteRequest deleteRequest, HttpServletRequest request) {
         ThrowUtils.throwIf(deleteRequest == null || deleteRequest.getId() <= 0, ErrorCode.PARAMS_ERROR);
@@ -105,6 +114,7 @@ public class SpacePictureController {
     /**
      * 根据 id 获取空间图片
      */
+    @SaSpaceCheckPermission("picture:view")
     @GetMapping("/get/vo")
     public BaseResponse<PictureVO> getPictureVOById(long id, HttpServletRequest request) {
         ThrowUtils.throwIf(id <= 0, ErrorCode.PARAMS_ERROR);
@@ -115,6 +125,7 @@ public class SpacePictureController {
     /**
      * 分页获取空间内的图片
      */
+    @SaSpaceCheckPermission("picture:view")
     @PostMapping("/list/page/vo")
     public BaseResponse<Page<PictureVO>> listPictureVOByPage(@RequestBody SpacePictureQueryRequest spacePictureQueryRequest,
                                                              HttpServletRequest request) {
@@ -127,6 +138,7 @@ public class SpacePictureController {
     /**
      * 分页获取空间内的 live 图
      */
+    @SaSpaceCheckPermission("picture:view")
     @PostMapping("/list/page/live/vo")
     public BaseResponse<Page<LivePictureVO>> listLivePictureVOByPage(
             @RequestBody SpacePictureQueryRequest spacePictureQueryRequest, HttpServletRequest request) {

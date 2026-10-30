@@ -7,6 +7,7 @@ import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.li.apicturebackend.auth.StpKit;
 import com.li.apicturebackend.constant.UserConstant;
 import com.li.apicturebackend.exception.BusinessException;
 import com.li.apicturebackend.exception.ErrorCode;
@@ -114,6 +115,10 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
 
         // 3.保存登录状态
         request.getSession().setAttribute(UserConstant.USER_LOGIN_STATE, user);
+        // 3.1 同步登录态到 Sa-Token 的空间账号体系，团队空间鉴权要用
+        //     两套登录态的过期时间必须一致，见 application.yml 的 spring.session.timeout 与 sa-token.timeout
+        StpKit.SPACE.login(user.getId());
+        StpKit.SPACE.getSession().set(UserConstant.USER_LOGIN_STATE, user);
 
         // 4. 返回脱敏后的登录用户信息
 
@@ -213,6 +218,8 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         }
         // 移除登录态
         request.getSession().removeAttribute(UserConstant.USER_LOGIN_STATE);
+        // 同步退出 Sa-Token 的空间账号体系，否则空间接口还能凭旧 token 通过鉴权
+        StpKit.SPACE.logout();
         return true;
     }
 
