@@ -1,0 +1,11 @@
+node_modules/
+dist/
+dist-ssr/
+.vite/
+*.local
+*.log
+shots/
+scratch/
+design-samples/
+.DS_Store
+Thumbs.db

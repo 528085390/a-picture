@@ -1,0 +1,77 @@
+server:
+  port: 8000
+  servlet:
+    context-path: /api
+  forward-headers-strategy: framework
+
+spring:
+  application:
+    name: a-picture-backend
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: ${SPRING_DATASOURCE_URL}
+    username: ${SPRING_DATASOURCE_USERNAME}
+    password: ${SPRING_DATASOURCE_PASSWORD}
+  redis:
+    host: ${SPRING_REDIS_HOST}
+    port: ${SPRING_REDIS_PORT:6379}
+    database: ${SPRING_REDIS_DATABASE:1}
+  session:
+    store-type: redis
+    timeout: 300000s
+  servlet:
+    multipart:
+      max-file-size: 10MB
+
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: false
+    log-impl: org.apache.ibatis.logging.nologging.NoLoggingImpl
+  global-config:
+    db-config:
+      logic-delete-field: isDelete
+      logic-delete-value: 1
+      logic-not-delete-value: 0
+
+knife4j:
+  enable: true
+  openapi:
+    title: a-picture-backend接口文档
+    version: 1.0
+    group:
+      default:
+        api-rule: package
+        api-rule-resources:
+          - com.li.apicturebackend.controller
+
+aliYunAi:
+  apiKey: ${ALIYUN_AI_API_KEY:}
+
+sa-token:
+  token-name: satoken
+  timeout: 300000
+  is-concurrent: true
+  is-share: true
+  token-style: uuid
+  is-log: false
+
+cos:
+  client:
+    host: ${COS_HOST}
+    secretId: ${COS_SECRET_ID}
+    secretKey: ${COS_SECRET_KEY}
+    bucketName: ${COS_BUCKET_NAME}
+    region: ${COS_REGION}
+
+file:
+  storage:
+    type: r2
+
+r2:
+  client:
+    endpoint: ${R2_ENDPOINT}
+    accessKeyId: ${R2_ACCESS_KEY_ID}
+    secretAccessKey: ${R2_SECRET_ACCESS_KEY}
+    bucketName: ${R2_BUCKET_NAME}
+    publicUrl: ${R2_PUBLIC_URL}
+    region: auto

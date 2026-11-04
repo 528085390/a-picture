@@ -1,0 +1,4 @@
+.env
+initdb
+*.log
+backend-src

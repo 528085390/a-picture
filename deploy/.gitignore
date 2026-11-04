@@ -1,0 +1,7 @@
+.env
+app.jar
+backend-src/
+web/
+web-dist-*.tgz
+web.bak-*
+*.json
