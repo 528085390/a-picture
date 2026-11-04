@@ -142,7 +142,7 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space> implements
     public boolean editSpace(SpaceEditRequest spaceEditRequest, User loginUser) {
         ThrowUtils.throwIf(spaceEditRequest == null || spaceEditRequest.getId() == null
                 || spaceEditRequest.getId() <= 0, ErrorCode.PARAMS_ERROR);
-        Space oldSpace = spacePermissionHelper.checkSpaceAccess(spaceEditRequest.getId(), loginUser);
+        Space oldSpace = spacePermissionHelper.checkSpaceManageAccess(spaceEditRequest.getId(), loginUser);
         Space space = new Space();
         space.setId(oldSpace.getId());
         space.setSpaceName(spaceEditRequest.getSpaceName());
@@ -181,7 +181,7 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space> implements
     @Override
     @Transactional(rollbackFor = Exception.class)
     public boolean deleteSpace(long id, User loginUser) {
-        Space space = spacePermissionHelper.checkSpaceAccess(id, loginUser);
+        Space space = spacePermissionHelper.checkSpaceManageAccess(id, loginUser);
         ThrowUtils.throwIf(space.getTotalCount() != null && space.getTotalCount() > 0,
                 ErrorCode.OPERATION_ERROR, "空间内还有图片，请先清空后再删除");
         boolean result = this.removeById(id);

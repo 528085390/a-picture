@@ -33,6 +33,7 @@ import cn.hutool.core.io.IoUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.bouncycastle.pqc.math.linearalgebra.IntUtils;
 import org.springframework.beans.BeanUtils;
+import org.springframework.util.StreamUtils;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -41,6 +42,8 @@ import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.URLDecoder;
+import java.nio.charset.StandardCharsets;
 import java.util.Date;
 import java.util.Random;
 import java.util.concurrent.TimeUnit;
@@ -114,6 +117,34 @@ public class PictureController {
         }
     }
 
+
+    /**
+     * 以内联方式读取对象存储中的图片，供无法直连 R2 公网域名的环境使用
+     */
+    @GetMapping("/file/**")
+    public void getPictureFile(HttpServletRequest request, HttpServletResponse response) throws IOException {
+        String prefix = request.getContextPath() + "/picture/file/";
+        String uri = request.getRequestURI();
+        ThrowUtils.throwIf(!uri.startsWith(prefix), ErrorCode.PARAMS_ERROR);
+        String key = URLDecoder.decode(uri.substring(prefix.length()), StandardCharsets.UTF_8);
+        ThrowUtils.throwIf(StrUtil.isBlank(key), ErrorCode.PARAMS_ERROR);
+        try (InputStream inputStream = fileStorageManager.download(key)) {
+            String lower = key.toLowerCase();
+            if (lower.endsWith(".png")) response.setContentType("image/png");
+            else if (lower.endsWith(".webp")) response.setContentType("image/webp");
+            else if (lower.endsWith(".gif")) response.setContentType("image/gif");
+            else if (lower.endsWith(".mp4")) response.setContentType("video/mp4");
+            else if (lower.endsWith(".webm")) response.setContentType("video/webm");
+            else if (lower.endsWith(".mov")) response.setContentType("video/quicktime");
+            else response.setContentType("image/jpeg");
+            response.setHeader("Cache-Control", "public, max-age=86400");
+            StreamUtils.copy(inputStream, response.getOutputStream());
+            response.getOutputStream().flush();
+        } catch (Exception e) {
+            log.error("read picture file failed, key={}", key, e);
+            throw new BusinessException(ErrorCode.SYSTEM_ERROR, "读取图片失败");
+        }
+    }
 
     /**
      * 删除图片
@@ -237,18 +268,11 @@ public class PictureController {
 //        // 限制爬虫
 //        ThrowUtils.throwIf(size > 20, ErrorCode.PARAMS_ERROR);
 
-        // 查缓存
-        Object cachedResult = cacheManager.get(pictureQueryRequest);
-        if (cachedResult != null) {
-            return Result.success((Page<LivePictureVO>) cachedResult);
-        }
-
         // 查询数据库（公共图库不包含空间图片）
         QueryWrapper<Picture> queryWrapper = new QueryWrapper<>();
         queryWrapper.isNull("spaceId");
+        queryWrapper.eq("type", "live");
         Page<Picture> picturePage = pictureService.page(new Page<>(current, size), queryWrapper);
-        // 缓存结果
-        cacheManager.put(pictureQueryRequest, picturePage, 5, 5,TimeUnit.MINUTES);
         // 获取封装类
         return Result.success(pictureService.getLivePictureVOPage(picturePage, request));
     }

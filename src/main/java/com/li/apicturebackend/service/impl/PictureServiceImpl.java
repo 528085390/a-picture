@@ -103,7 +103,7 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
         picture.setUserId(loginUser.getId());
         picture.setUrl(uploadPictureResult.getUrl());
         picture.setPreviewUrl(uploadPictureResult.getPreviewUrl());
-        picture.setType("live"); //todo 全部写死live图
+        picture.setType("static");
 
         if (pictureId != null) {
             // 修改
@@ -263,9 +263,13 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
         List<Long> pictureIds = pictureVOList.stream()
                 .map(PictureVO::getId)
                 .collect(Collectors.toList());
-        QueryWrapper<LiveVideo> queryWrapper = new QueryWrapper<>();
-        queryWrapper.in("picId", pictureIds);
-        List<LiveVideo> liveVideoList = liveVideoService.list(queryWrapper);
+        // 空页时绝不能生成 IN ()，否则 MySQL 会报语法错误
+        List<LiveVideo> liveVideoList = new ArrayList<>();
+        if (CollUtil.isNotEmpty(pictureIds)) {
+            QueryWrapper<LiveVideo> queryWrapper = new QueryWrapper<>();
+            queryWrapper.in("picId", pictureIds);
+            liveVideoList = liveVideoService.list(queryWrapper);
+        }
         Map<Long, List<LiveVideo>> pictureIdLiveVideoMap = liveVideoList.stream()
                 .collect(Collectors.groupingBy(LiveVideo::getPicId));
         // 填充信息
