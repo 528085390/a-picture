@@ -17,7 +17,7 @@ const usedPct = computed(() => spaces.totalMax ? Math.min(100, spaces.totalUsed 
 async function logout() { await user.logout(); spaces.reset(); router.push('/login') }
 </script>
 <template>
-  <AppShell>
+  <AppShell mobile-headless>
     <main class="library">
       <div class="lib-head"><div><div class="eyebrow">Account / 账号</div><h1>账号设置</h1><div class="lib-sub">你的身份、存储与这个档案馆的连接</div></div></div>
       <div class="library-scroll">

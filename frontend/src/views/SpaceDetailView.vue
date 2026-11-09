@@ -2,8 +2,12 @@
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import AppShell from '@/components/AppShell.vue'
+import MobileSpacePanel from '@/mobile/MobileSpacePanel.vue'
+import MobilePhotoViewer from '@/mobile/MobilePhotoViewer.vue'
+import { measurePhoto, type Rect } from '@/mobile/types'
+import { useIsMobile } from '@/composables/useIsMobile'
 import Icon from '@/components/Icon.vue'
-import { thumbUrl } from '@/utils/media'
+import { originThumbUrl } from '@/utils/media'
 import PhotoGrid from '@/components/PhotoGrid.vue'
 import PhotoViewer from '@/components/PhotoViewer.vue'
 import EditPhotoModal from '@/components/EditPhotoModal.vue'
@@ -24,6 +28,9 @@ const router = useRouter()
 const spaces = useSpaceStore()
 const user = useUserStore()
 const ui = useUiStore()
+const mobile = useIsMobile()
+const mobileColumns = ref(Math.min(6, Math.max(2, Number(localStorage.getItem('nocturne.mobile.cols')) || 4)))
+watch(mobileColumns, v => localStorage.setItem('nocturne.mobile.cols', String(v)))
 const id = computed(() => String(route.params.id))
 const space = ref<SpaceVO | null>(null)
 const loading = ref(true)
@@ -40,6 +47,7 @@ const selectedIds = ref<string[]>([])
 const selected = computed(() => photos.value.filter(p => selectedIds.value.includes(String(p.id))))
 const viewerOpen = ref(false)
 const viewerIndex = ref(0)
+const viewerOrigin = ref<Rect | null>(null)
 const editOpen = ref(false)
 const editing = ref<PictureVO | null>(null)
 const outpaintOpen = ref(false)
@@ -78,7 +86,7 @@ const roleText = (r: string) => ({ admin: '管理员', editor: '编辑者', view
 const displayRole = computed(() => isAdmin.value ? 'admin' : (myRole.value || 'viewer'))
 const usedPct = computed(() => Math.min(100, Number(space.value?.totalSize || 0) / Math.max(1, Number(space.value?.maxSize || 1)) * 100))
 const countPct = computed(() => Math.min(100, Number(space.value?.totalCount || 0) / Math.max(1, Number(space.value?.maxCount || 1)) * 100))
-const cover = computed(() => thumbUrl(photos.value[0]?.previewUrl || photos.value[0]?.url || '', 360))
+const cover = computed(() => originThumbUrl(photos.value[0]?.previewUrl || photos.value[0]?.url || '', 360))
 const maxCat = computed(() => Math.max(1, ...categories.value.map(x => x.count)))
 const maxTag = computed(() => Math.max(1, ...tags.value.map(x => x.count)))
 const maxSize = computed(() => Math.max(1, ...sizes.value.map(x => x.count)))
@@ -107,7 +115,12 @@ async function loadPhotos(reset = false) {
     if (photoHasMore.value) photoPage.value++
   } catch (e) { ui.toast((e as Error).message, 'error') } finally { photoLoading.value = false }
 }
-function openViewer(i: number) { viewerIndex.value = i; viewerOpen.value = true }
+function openViewer(i: number) {
+  const p = photos.value[i]
+  viewerOrigin.value = p ? measurePhoto(p.id) : null
+  viewerIndex.value = i
+  viewerOpen.value = true
+}
 function openEdit(p: PictureVO) { editing.value = p; editOpen.value = true }
 function onSaved(p: PictureVO) { const i = photos.value.findIndex(x => String(x.id) === String(p.id)); if (i >= 0) photos.value[i] = { ...photos.value[i], ...p }; ui.toast('影像信息已更新', 'success') }
 async function deletePhoto(p: PictureVO) {
@@ -185,7 +198,46 @@ onMounted(() => { loadSpace(); window.addEventListener('nocturne:uploaded', onUp
 onBeforeUnmount(() => window.removeEventListener('nocturne:uploaded', onUploaded))
 </script>
 <template>
-  <AppShell>
+  <div v-if="mobile" class="m-app m-space">
+  <MobileSpacePanel
+    :title="space?.spaceName || '空间'"
+    :subtitle="space ? (photoTotal + ' 张照片 · ' + formatBytes(space.totalSize || 0)) : ''"
+    :photos="photos"
+    v-model:columns="mobileColumns"
+    :loading="loading"
+    :error="error"
+    :photo-loading="photoLoading"
+    :has-more="photoHasMore"
+    :can-edit="canEdit"
+    :can-manage="canManage"
+    @back="router.push({ name: 'spaces' })"
+    @upload="ui.openUpload(id)"
+    @settings="openSettings"
+    @open="openViewer"
+    @load-more="loadPhotos()"
+  />
+
+  <MobilePhotoViewer
+    v-if="viewerOpen"
+    :photos="photos"
+    :origin-rect="viewerOrigin"
+    v-model:index="viewerIndex"
+    :open="viewerOpen"
+    :can-edit="canEdit"
+    @update:open="v => { if (!v) viewerOpen = false }"
+    @close="viewerOpen = false"
+    @edit="openEdit"
+    @delete="deletePhoto"
+    @outpainting="p => { outpaintPhoto = p; outpaintOpen = true }"
+  />
+  <EditPhotoModal v-model:open="editOpen" :photo="editing" :space-id="id" @saved="onSaved" />
+  <OutpaintingModal v-model:open="outpaintOpen" :photo="outpaintPhoto" />
+  <Teleport to="body">
+    <div v-if="settingsOpen" class="modal-backdrop" @click.self="settingsOpen = false"><div class="modal small"><header class="modal-head"><div><h2>空间设置</h2><p>{{ space?.spaceName }}</p></div><button class="icon-btn" @click="settingsOpen = false"><Icon name="close" :size="16" /></button></header><div class="modal-body"><div class="field"><label>空间名称</label><input v-model="settingsName" class="input" maxlength="30" @keyup.enter="saveSettings"></div><p v-if="settingsError" class="form-error">{{ settingsError }}</p><div class="danger-zone"><div><b>删除空间</b><span>此操作不可撤销。</span></div><button class="btn danger" @click="deleteSpace">删除</button></div></div><footer class="modal-foot"><button class="btn" @click="settingsOpen = false">取消</button><button class="btn gold" :disabled="settingsSaving" @click="saveSettings">{{ settingsSaving ? '保存中…' : '保存' }}</button></footer></div></div>
+  </Teleport>
+</div>
+
+<AppShell v-else>
     <main class="library space-detail">
       <div v-if="loading" class="page-loading"><span class="spinner"></span>正在进入空间…</div>
       <div v-else-if="error" class="empty-rich space-error"><div class="glyph">×</div><h3>无法打开这个空间</h3><p>{{ error }}</p><button class="btn" @click="router.push({ name: 'spaces' })">返回空间列表</button></div>

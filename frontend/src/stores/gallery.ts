@@ -1,12 +1,21 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import { pictureApi } from '@/api/picture'
-import type { LivePictureVO, PictureVO } from '@/api/types'
+import type { LivePictureVO, Page, PictureVO } from '@/api/types'
 
 const PAGE_SIZE = 20
-const APPEND_CHUNK = 4
+/** 后端 listVOByPage 把 pageSize 卡在 20（防爬），一次触发并发拉 3 页，滚动时一次多来 60 张 */
+const LOAD_BATCH = 3
 const INITIAL_PREFETCH_PAGES = 6
-const nextFrame = () => new Promise<void>(resolve => requestAnimationFrame(() => resolve()))
+/** index.html 里的并发预取（和 JS 包同时发出）；首屏第一页优先复用它，省掉一次串行往返。 */
+function takePrefetchedPage(): Promise<Page<PictureVO> | null> | null {
+  const w = window as unknown as { __APIC_LIST_PREFETCH?: Promise<Page<PictureVO> | null> | null }
+  const pending = w.__APIC_LIST_PREFETCH
+  if (!pending) return null
+  w.__APIC_LIST_PREFETCH = null
+  return pending
+}
+
 export const useGalleryStore = defineStore('gallery', () => {
   const photos = ref<PictureVO[]>([])
   const total = ref(0)
@@ -29,33 +38,53 @@ export const useGalleryStore = defineStore('gallery', () => {
     error.value = ''
     try {
       const current = nextPage.value
-      const page = await pictureApi.listVOByPage({ current, pageSize: PAGE_SIZE, sortField: 'createTime', sortOrder: 'descend' })
+      const prefetched = current === 1 ? takePrefetchedPage() : null
+      const page = (prefetched ? await prefetched : null)
+        ?? await pictureApi.listVOByPage({ current, pageSize: PAGE_SIZE, sortField: 'createTime', sortOrder: 'descend' })
       const known = new Set(photos.value.map(p => p.id))
       total.value = page.total
       pages.value = page.pages
       if (first) {
-        // 首屏一次性预取前几页，避免用户滚到底时再插入新卡片造成绘制卡顿。
-        const collected = [...page.records]
+        // 首屏只等第一页：先出图，其余页在后台预取后追加，避免白屏等待。
+        photos.value = page.records
         page.records.forEach(p => known.add(p.id))
+        pages.value = page.pages
+        nextPage.value = 2
+        initialized.value = true
+        loading.value = false
         const lastPage = Math.min(page.pages, INITIAL_PREFETCH_PAGES)
         if (lastPage > 1) {
-          const rest = await Promise.all(Array.from({ length: lastPage - 1 }, (_, i) =>
+          nextPage.value = lastPage + 1
+          void Promise.all(Array.from({ length: lastPage - 1 }, (_, i) =>
             pictureApi.listVOByPage({ current: i + 2, pageSize: PAGE_SIZE, sortField: 'createTime', sortOrder: 'descend' }).catch(() => null)
-          ))
-          for (const r of rest) {
-            if (!r) continue
-            for (const p of r.records) if (!known.has(p.id)) { known.add(p.id); collected.push(p) }
-          }
+          )).then(rest => {
+            const extra: PictureVO[] = []
+            for (const r of rest) {
+              if (!r) continue
+              for (const p of r.records) if (!known.has(p.id)) { known.add(p.id); extra.push(p) }
+            }
+            if (extra.length) photos.value = [...photos.value, ...extra]
+          })
         }
-        photos.value = collected
-        nextPage.value = lastPage + 1
       } else {
-        const fresh = page.records.filter(p => !known.has(p.id))
-        for (let i = 0; i < fresh.length; i += APPEND_CHUNK) {
-          photos.value = [...photos.value, ...fresh.slice(i, i + APPEND_CHUNK)]
-          if (i + APPEND_CHUNK < fresh.length) await nextFrame()
+        // 后端 pageSize 上限 20，一次并发拉多页再一次性追加：滚动时少触发几次、每次多来一批。
+        // 一次性插入同样重要：分帧插入会让每一帧都重排整块网格。
+        const batch = Math.max(1, Math.min(LOAD_BATCH, pages.value - current + 1))
+        const results = await Promise.all(Array.from({ length: batch }, (_, i) =>
+          pictureApi.listVOByPage({ current: current + i, pageSize: PAGE_SIZE, sortField: 'createTime', sortOrder: 'descend' })
+            .then(page => ({ page }))
+            .catch(() => ({ page: null as Page<PictureVO> | null }))))
+        const fresh: PictureVO[] = []
+        let advanced = 0
+        for (const item of results) {
+          if (!item.page) break
+          pages.value = item.page.pages
+          total.value = item.page.total
+          for (const p of item.page.records) if (!known.has(p.id)) { known.add(p.id); fresh.push(p) }
+          advanced++
         }
-        nextPage.value = current + 1
+        if (fresh.length) photos.value = [...photos.value, ...fresh]
+        nextPage.value = current + Math.max(1, advanced)
       }
       initialized.value = true
     } catch (e) { error.value = (e as Error).message; initialized.value = true }

@@ -4,8 +4,10 @@ import App from './App.vue'
 import router from './router'
 import { setUnauthorizedHandler } from './api/request'
 import { useUserStore } from './stores/user'
+import { bootstrapApp } from './pwa/bootstrap'
 import './styles/nocturne.css'
 import './styles/app.css'
+import './styles/mobile.css'
 
 const app = createApp(App)
 const pinia = createPinia()
@@ -22,4 +24,16 @@ setUnauthorizedHandler(() => {
   }
 })
 
+bootstrapApp()
 app.mount('#app')
+
+// 首屏骨架（index.html 里的 #boot）在挂载后淡出，避免白屏与闪烁。
+const boot = document.getElementById('boot')
+if (boot) {
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      boot.classList.add('is-done')
+      window.setTimeout(() => boot.remove(), 520)
+    })
+  })
+}

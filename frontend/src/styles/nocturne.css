@@ -3,7 +3,7 @@
 :root{
   --bg:#060607;--panel:#0a0a0c;--panel2:#0d0d10;--gold:#c9a96a;--gold2:#e3c88f;--gold-soft:#9f8455;
   --ivory:#ece5d7;--muted:#8b8478;--dim:#5d584f;--line:rgba(201,169,106,.2);--line-soft:rgba(201,169,106,.09);
-  --serif:"Cormorant Garamond","Times New Roman",serif;--cn:"Noto Serif SC",serif;--sans:"Inter","Noto Sans SC",sans-serif;
+  --serif:"Didot","Bodoni 72","Cormorant Garamond","Times New Roman","Songti SC",serif;--cn:"Songti SC","Noto Serif SC","Source Han Serif SC","STSong","Times New Roman",serif;--sans:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI","PingFang SC","Microsoft YaHei","Helvetica Neue","Inter",Arial,sans-serif;
   --thumb:176px;--sidebar:224px;--top:64px;
   --ease-out:cubic-bezier(.16,1,.3,1);--ease-soft:cubic-bezier(.22,.61,.36,1);--ease-in:cubic-bezier(.4,0,1,1);
   --dur-micro:160ms;--dur-ui:220ms;--dur-small:300ms;--dur-section:620ms;--dur-hero:1000ms;
@@ -120,6 +120,8 @@ h1{font-family:var(--cn);font-weight:300;font-size:clamp(32px,3.5vw,48px);letter
 .month .n{margin-left:auto;font-size:8px;letter-spacing:.18em;color:var(--gold-soft);text-transform:uppercase;white-space:nowrap;flex:0 0 auto}
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(var(--thumb),1fr));justify-content:stretch;gap:7px;margin-bottom:26px}
 .card{position:relative;aspect-ratio:1;overflow:hidden;background:#101013;cursor:pointer;border-radius:2px;contain:layout style;transition:transform 460ms var(--ease-soft),box-shadow 520ms var(--ease-soft)}
+/* 离屏卡片交给浏览器跳过布局/绘制：滚到哪只算哪几行 */
+@supports (content-visibility: auto){.card{content-visibility:auto}}
 .card:hover{transform:translateY(-3px) scale(1.012);box-shadow:0 26px 52px -24px rgba(0,0,0,.95),0 0 0 1px rgba(201,169,106,.09)}
 .card:active{transform:translateY(-1px) scale(1.002);transition-duration:180ms}
 .card.zoom-flip{pointer-events:none;will-change:transform}

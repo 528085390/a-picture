@@ -3,7 +3,7 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import AppShell from '@/components/AppShell.vue'
 import Icon from '@/components/Icon.vue'
-import { thumbUrl } from '@/utils/media'
+import { originThumbUrl } from '@/utils/media'
 import { useSpaceStore } from '@/stores/spaces'
 import { useUserStore } from '@/stores/user'
 import { useUiStore } from '@/stores/ui'
@@ -30,7 +30,7 @@ async function load() {
   await spaces.ensureLoaded(true)
   spaces.entries.forEach(async s => {
     if (covers.value[s.id]) return
-    try { const p = await spacePictureApi.listVOByPage({ spaceId: s.id, current: 1, pageSize: 1 }); const pic = p.records[0]; if (pic) covers.value[s.id] = thumbUrl(pic.previewUrl || pic.url || '', 360) } catch { /* cover is optional */ }
+    try { const p = await spacePictureApi.listVOByPage({ spaceId: s.id, current: 1, pageSize: 1 }); const pic = p.records[0]; if (pic) covers.value[s.id] = originThumbUrl(pic.previewUrl || pic.url || '', 360) } catch { /* cover is optional */ }
   })
 }
 function openCreate() { if (!user.isLoggedIn) { router.push({ name: 'login', query: { redirect: '/spaces' } }); return } form.spaceName = ''; form.spaceLevel = 1; form.spaceType = 1; error.value = ''; createOpen.value = true }
@@ -45,7 +45,7 @@ async function create() {
 onMounted(load)
 </script>
 <template>
-  <AppShell>
+  <AppShell mobile-headless>
     <main class="library">
       <div class="lib-head"><div><div class="eyebrow">Spaces / 空间</div><h1>团队与收藏</h1><div class="lib-sub"><b>{{ spaces.entries.length }}</b> 个空间 · {{ totalPhotos }} 张影像 · {{ formatBytes(spaces.totalUsed) }}</div></div><div class="tools"><button class="tool" :class="{ active: filter === 'all' }" @click="filter = 'all'">全部</button><button class="tool" :class="{ active: filter === 'team' }" @click="filter = 'team'">团队</button><button class="tool" :class="{ active: filter === 'private' }" @click="filter = 'private'">私有</button><button class="btn gold" @click="openCreate"><Icon name="plus" :size="13" />新建空间</button></div></div>
       <div class="library-scroll">
@@ -75,4 +75,21 @@ onMounted(load)
 .space-guest{max-width:480px;margin:80px auto;text-align:center}.space-guest h2{font-family:var(--cn);font-size:30px;font-weight:300;margin:12px 0 10px;color:var(--ivory)}.space-guest p{font-size:9px;color:var(--dim);line-height:1.9;margin-bottom:22px}
 .level-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}.level-grid button,.type-grid button{border:1px solid var(--line-soft);padding:12px 10px;text-align:left;transition:.2s}.level-grid button.on,.type-grid button.on{border-color:rgba(201,169,106,.55);background:rgba(201,169,106,.06)}.level-grid b{display:block;font-size:10px;font-weight:400;color:var(--ivory)}.level-grid span{display:block;font-size:7px;color:var(--dim);margin-top:4px}.type-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px}.type-grid button{display:flex;flex-direction:column;gap:5px;color:var(--muted)}.type-grid b{font-size:10px;font-weight:400;color:var(--ivory)}.type-grid span{font-size:7px;color:var(--dim)}
 @media(max-width:700px){.space-grid{grid-template-columns:1fr}.space-cover{height:180px}}
+@media(max-width:860px){
+  .space-grid{grid-template-columns:1fr;gap:14px;padding-bottom:120px}
+  .space-cover{height:210px}
+  .cover-top{font-size:10px;letter-spacing:.14em}
+  .cover-bottom h2{font-size:26px}
+  .cover-bottom p{font-size:12px;margin-top:8px}
+  .role-tag{font-size:10px;top:46px}
+  .space-meta{padding:14px 16px}
+  .space-meta span{font-size:10px;letter-spacing:.14em}
+  .space-meta b{font-size:13px}
+  .space-meter{margin:0 16px 16px}
+  .create-card{min-height:190px}
+  .create-card b{font-size:19px}
+  .create-card span{font-size:10px;letter-spacing:.14em;text-align:center;padding:0 20px}
+  .lib-head h1{font-size:30px}
+  .space-guest{margin:48px auto}
+}
 </style>

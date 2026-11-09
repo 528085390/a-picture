@@ -9,6 +9,8 @@ import { favoriteState } from '@/composables/useFavorites'
 import { formatBytes } from '@/utils/format'
 import Icon from './Icon.vue'
 
+const props = defineProps<{ mobileHeadless?: boolean }>()
+
 const route = useRoute()
 const router = useRouter()
 const user = useUserStore()
@@ -47,7 +49,7 @@ onMounted(async () => {
 })
 </script>
 <template>
-  <div class="shell">
+  <div class="shell" :class="{ 'is-mobile-headless': props.mobileHeadless }">
     <div class="noise"></div><div class="spot"></div>
     <header class="topbar">
       <RouterLink class="brand" to="/" aria-label="NOCTURNE 夜之馆"><b>NOCTURNE</b><span>夜之馆 · 私人图库</span></RouterLink>
@@ -105,11 +107,11 @@ onMounted(async () => {
     <slot />
 
     <nav class="mobile-nav">
-      <RouterLink to="/gallery" :class="{ active: route.name === 'gallery' }"><Icon name="grid" :size="17" />画廊</RouterLink>
-      <RouterLink :to="{ name: 'favorites' }" :class="{ active: route.name === 'favorites' }"><Icon name="heart" :size="17" />收藏</RouterLink>
-      <button class="add" type="button" aria-label="上传" @click="ui.openUpload()"><Icon name="plus" :size="18" /></button>
-      <RouterLink :to="{ name: 'spaces' }" :class="{ active: route.name === 'spaces' }"><Icon name="team" :size="17" />空间</RouterLink>
-      <RouterLink :to="user.isLoggedIn ? '/settings' : '/login'" :class="{ active: route.name === 'settings' }"><Icon name="user" :size="17" />我的</RouterLink>
+      <RouterLink to="/gallery" :class="{ active: route.name === 'gallery' }"><Icon name="grid" :size="26" />图库</RouterLink>
+      <RouterLink :to="{ name: 'favorites' }" :class="{ active: route.name === 'favorites' }"><Icon name="heart" :size="26" />收藏</RouterLink>
+      <RouterLink :to="{ name: 'live' }" :class="{ active: route.name === 'live' }"><Icon name="live" :size="26" />Live</RouterLink>
+      <RouterLink :to="{ name: 'spaces' }" :class="{ active: route.name === 'spaces' || route.name === 'space-detail' }"><Icon name="team" :size="26" />空间</RouterLink>
+      <RouterLink :to="user.isLoggedIn ? '/settings' : '/login'" :class="{ active: route.name === 'settings' }"><Icon name="user" :size="26" />我的</RouterLink>
     </nav>
   </div>
 </template>
@@ -127,5 +129,5 @@ onMounted(async () => {
 .space-mini-row i{width:3px;height:3px;border-radius:50%;background:var(--gold-soft);flex:none}
 .space-mini-row span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.space-mini-row em{margin-left:auto;font-style:normal;font-size:7px;color:var(--dim)}
 .space-mini-empty{font-size:8px;color:var(--dim);padding:3px 10px 5px}
-@media(max-width:820px){.topbar .search{max-width:none}.avatar-wrap{display:none}}
+@media(max-width:860px){.topbar .search{max-width:none}.avatar-wrap{display:none}}
 </style>

@@ -9,3 +9,5 @@ scratch/
 design-samples/
 .DS_Store
 Thumbs.db
+preview.err
+*.err

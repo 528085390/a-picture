@@ -4,7 +4,8 @@ import type { PictureVO } from '@/api/types'
 import { monthKey, monthRange, parseDate, pad, formatBytes } from '@/utils/format'
 import { useThumbZoom, ZOOM_STEPS } from '@/composables/useThumbZoom'
 import Icon from './Icon.vue'
-import { thumbUrl } from '@/utils/media'
+import { mediaUrl, thumbUrl, originThumbUrl } from '@/utils/media'
+import { vLazySrc } from '@/directives/lazySrc'
 
 const props = withDefaults(defineProps<{
   photos: PictureVO[]
@@ -154,11 +155,31 @@ watch(scrollEl, (el, old) => {
 }, { flush: 'post' })
 onBeforeUnmount(() => {
   document.body.classList.remove('select-mode', 'panning', 'box-selecting')
-  cancelAnimationFrame(panRAF); cancelAnimationFrame(marqueeRAF); clearZoomFlip(); window.clearTimeout(scrollIdleTimer); scrollEl.value?.removeEventListener('wheel', onWheel); document.body.classList.remove('scrolling')
+  cancelAnimationFrame(panRAF); cancelAnimationFrame(marqueeRAF); clearZoomFlip(); window.clearTimeout(scrollIdleTimer); window.clearTimeout(autoLoadTimer); autoObserver?.disconnect(); scrollEl.value?.removeEventListener('wheel', onWheel); document.body.classList.remove('scrolling')
   window.removeEventListener('pointermove', onPanMove); window.removeEventListener('pointerup', onPanUp); window.removeEventListener('pointercancel', onPanUp)
 })
 
-function imageSrc(p: PictureVO) { return thumbUrl(p.previewUrl || p.url || '', 360) }
+// 三级回退：同源缩略图 → Cloudflare 缩略图 → 1280 预览图，全失败才显示占位块
+const fallbackStage = ref<Map<string, number>>(new Map())
+function imageSrc(p: PictureVO) {
+  const source = p.previewUrl || p.url || ''
+  const stage = fallbackStage.value.get(p.id) || 0
+  if (stage === 0) return thumbUrl(source, 360)
+  if (stage === 1) return originThumbUrl(source, 360)
+  return mediaUrl(source)
+}
+function onThumbLoad(e: Event) { (e.target as HTMLImageElement).classList.add('is-loaded') }
+function onThumbError(p: PictureVO, ev?: Event) {
+  ;(ev?.target as HTMLImageElement | undefined)?.classList.remove('is-loaded')
+  const stage = fallbackStage.value.get(p.id) || 0
+  if (stage < 2) {
+    const next = new Map(fallbackStage.value)
+    next.set(p.id, stage + 1)
+    fallbackStage.value = next
+    return
+  }
+  markFailed(p.id)
+}
 function markFailed(id: string) { const next = new Set(failed.value); next.add(id); failed.value = next }
 function dims(p: PictureVO) { return p.picWidth && p.picHeight ? p.picWidth + '×' + p.picHeight : (p.picFormat || '原始影像').toUpperCase() }
 function size(p: PictureVO) { return p.picSize ? formatBytes(p.picSize) : '' }
@@ -382,11 +403,34 @@ function finishBox() {
   document.body.classList.remove('box-selecting'); cancelAnimationFrame(marqueeRAF); marqueeRAF = 0
   suppressClickUntil = performance.now() + 360
 }
-function maybeAutoLoad(el: HTMLElement) {
+/* 自动加载：用挂在列表末尾的哨兵 + IntersectionObserver 判断「快到底了」。
+   旧写法在每条 scroll 事件里同步读 scrollHeight/scrollTop/clientHeight，卡片上百张时
+   每次都触发一次同步布局（实测单次 70–140ms），是桌面滚动掉帧的主因。 */
+const loadSentinel = ref<HTMLElement | null>(null)
+let autoObserver: IntersectionObserver | null = null
+let autoLoadTimer = 0
+let lastScrollAt = 0
+let scrolling = false
+
+function armAutoLoad() {
+  autoObserver?.disconnect()
+  const root = scrollEl.value, sentinel = loadSentinel.value
+  if (!root || !sentinel) return
+  autoObserver = new IntersectionObserver((entries) => {
+    if (entries.some(e => e.isIntersecting)) queueAutoLoad()
+  }, { root, rootMargin: '0px 0px 700px 0px' })
+  autoObserver.observe(sentinel)
+}
+
+function queueAutoLoad() {
   if (!props.hasMore || props.loadingMore || !autoLoadArmed || marqueeBox) return
   if (performance.now() < autoLoadCooldownUntil) return
-  const threshold = Math.max(280, thumb.value * 1.7)
-  if (el.scrollHeight - el.scrollTop - el.clientHeight > threshold) return
+  // 滚轮/拖拽还没停稳就等一等，别在滑动中插进一整批卡片
+  if (performance.now() - lastScrollAt < 140) {
+    window.clearTimeout(autoLoadTimer)
+    autoLoadTimer = window.setTimeout(queueAutoLoad, 90)
+    return
+  }
   autoLoadArmed = false
   autoLoadCooldownUntil = performance.now() + 450
   emit('load-more')
@@ -395,22 +439,21 @@ watch(() => props.loadingMore, v => {
   if (v) return
   autoLoadArmed = true
   autoLoadCooldownUntil = 0
-  nextTick(() => { if (scrollEl.value) maybeAutoLoad(scrollEl.value) })
+  nextTick(armAutoLoad)
 })
 watch(() => props.hasMore, v => { if (v) autoLoadArmed = true })
 watch(() => props.photos.length, () => {
   autoLoadArmed = true
   autoLoadCooldownUntil = 0
-  nextTick(() => {
-    if (scrollEl.value) maybeAutoLoad(scrollEl.value)
-    window.setTimeout(() => { if (scrollEl.value) maybeAutoLoad(scrollEl.value) }, 120)
-  })
+  nextTick(armAutoLoad)
 })
+watch([scrollEl, loadSentinel], () => nextTick(armAutoLoad), { flush: 'post' })
+watch(thumb, () => { window.clearTimeout(autoLoadTimer); autoLoadArmed = true; nextTick(armAutoLoad) })
 function onScroll() {
-  document.body.classList.add('scrolling')
+  lastScrollAt = performance.now()
+  if (!scrolling) { scrolling = true; document.body.classList.add('scrolling') }
   window.clearTimeout(scrollIdleTimer)
-  scrollIdleTimer = window.setTimeout(() => document.body.classList.remove('scrolling'), 150)
-  if (scrollEl.value) maybeAutoLoad(scrollEl.value)
+  scrollIdleTimer = window.setTimeout(() => { scrolling = false; document.body.classList.remove('scrolling') }, 150)
 }
 function focusFirst() { nextTick(() => scrollEl.value?.scrollTo({ top: 0, behavior: 'smooth' })) }
 defineExpose({ focusFirst, selectAll, toggleMode })
@@ -422,12 +465,12 @@ defineExpose({ focusFirst, selectAll, toggleMode })
       <div class="glyph">N</div><h3>{{ emptyTitle }}</h3><p>{{ emptyText }}</p>
       <slot name="empty-action" />
     </div>
-    <div v-else ref="scrollEl" class="library-scroll groups-anim" :style="{ '--thumb': thumb + 'px' }" @pointerdown="onPointerDown" @scroll.passive="onScroll">
+    <div v-else ref="scrollEl" class="library-scroll groups-anim" data-scroll-root :style="{ '--thumb': thumb + 'px' }" @pointerdown="onPointerDown" @scroll.passive="onScroll">
       <section v-for="(group, gi) in groups" :key="group.key" class="month-group" :style="{ '--gi': gi }">
         <div v-if="!flat" class="month"><h2>{{ group.key }}</h2><span class="range">{{ monthRange(group.dates) }}</span><span class="n">{{ pad(group.items.length) }} 张</span></div>
         <div class="grid">
           <article v-for="(p, ci) in group.items" :key="p.id" class="card" :class="{ selected: selected.has(p.id) }" :style="{ '--i': ci }" :data-id="p.id" @click="onCardClick(group.start + ci, p, $event)">
-            <img v-if="imageSrc(p) && !failed.has(p.id)" class="thumb-img" :src="imageSrc(p)" :alt="p.name || '照片'" :loading="(group.start + ci) < 12 ? 'eager' : 'lazy'" :fetchpriority="(group.start + ci) < 6 ? 'high' : 'auto'" decoding="async" draggable="false" @error="markFailed(p.id)" />
+            <img v-if="imageSrc(p) && !failed.has(p.id)" v-lazy-src="imageSrc(p)" class="thumb-img" alt="" :loading="(group.start + ci) < 12 ? 'eager' : 'lazy'" :fetchpriority="(group.start + ci) < 6 ? 'high' : 'auto'" decoding="async" draggable="false" @load="onThumbLoad" @error="onThumbError(p, $event)" />
             <div v-else class="img-fallback"><span>N</span><em>{{ (p.picFormat || 'IMAGE').toUpperCase() }}</em></div>
             <span v-if="showLiveBadge && p.type === 'live'" class="badge"><i></i>LIVE</span>
             <button v-if="selectable" class="check" type="button" :aria-label="'选择 ' + (p.name || '照片')" @click.stop="toggleSelect(p.id, true)"><Icon name="check" :size="10" /></button>
@@ -435,6 +478,7 @@ defineExpose({ focusFirst, selectAll, toggleMode })
           </article>
         </div>
       </section>
+      <div ref="loadSentinel" class="load-sentinel" aria-hidden="true"></div>
       <div v-if="loadingMore" class="load-more"><span class="spinner"></span>正在加载</div>
       <div v-else-if="hasMore" class="load-more auto-load-hint">继续下滑，自动加载更多</div>
       <div v-else class="load-more">已显示全部 {{ photos.length }} 张</div>
@@ -455,11 +499,14 @@ defineExpose({ focusFirst, selectAll, toggleMode })
 .photo-grid-root>.library-scroll{flex:1;min-height:0}
 .month-group{display:contents}
 .card img{background:#0f0f12}
+.card img.thumb-img{opacity:0}
+.card img.thumb-img.is-loaded{opacity:1}
 .card .img-fallback{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;background:radial-gradient(circle at 50% 35%,rgba(201,169,106,.12),transparent 55%),linear-gradient(145deg,#111116,#08080a);color:rgba(201,169,106,.55)}.card .img-fallback span{font-family:var(--serif);font-size:38px;line-height:1;letter-spacing:.08em}.card .img-fallback em{font-style:normal;font-size:6px;letter-spacing:.22em;color:var(--dim)}
 .card .check{opacity:0}
 :global(body.select-mode) .card .check{opacity:1}
 .card.selected .check{opacity:1}
 .selbar .danger-text:hover{color:var(--danger)}
 .grid{scroll-margin-top:20px}
+.load-sentinel{height:1px;width:100%}
 @media(max-width:820px){.photo-grid-root{min-height:0}.selbar{bottom:70px}}
 </style>

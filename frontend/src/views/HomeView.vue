@@ -131,7 +131,7 @@ onBeforeUnmount(() => { revealObserver?.disconnect(); revealObserver = null })
           <article v-for="(p, i) in featured" :key="p.id" class="hn-show hn-reveal" @click="showPhoto(p)">
             <div class="hn-show-img">
               <span class="hn-tag">ROOM 0{{ i + 1 }}</span>
-              <img :src="thumbUrl(p.url, 900)" :alt="p.name || '馆藏影像'" draggable="false">
+              <img :src="thumbUrl(p.url, 360)" :alt="p.name || '馆藏影像'" draggable="false">
               <span class="hn-go"><Icon name="arrow-right" :size="10" /></span>
             </div>
             <div class="hn-show-meta">
@@ -189,7 +189,7 @@ onBeforeUnmount(() => { revealObserver?.disconnect(); revealObserver = null })
       <div class="hn-foot-logo">NOCTURNE</div>
     </footer>
 
-    <div v-if="preview" class="hn-hover-preview" :style="{ left: preview.x + 'px', top: preview.y + 'px' }"><img :src="thumbUrl(preview.photo.url, 700)" :alt="preview.photo.name || '馆藏预览'"></div>
+    <div v-if="preview" class="hn-hover-preview" :style="{ left: preview.x + 'px', top: preview.y + 'px' }"><img :src="thumbUrl(preview.photo.url, 360)" :alt="preview.photo.name || '馆藏预览'"></div>
   </div>
 </template>
 
