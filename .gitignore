@@ -37,3 +37,9 @@ build/
 
 # local backups
 *.bak-*
+
+# local work artifacts
+tmp/
+tmp_compile.log
+tmp_cp.txt
+~/

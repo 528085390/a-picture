@@ -18,6 +18,7 @@ import com.li.apicturebackend.exception.ErrorCode;
 import com.li.apicturebackend.exception.ThrowUtils;
 import com.li.apicturebackend.manager.Cache.CacheManager;
 import com.li.apicturebackend.manager.FileStorageManager;
+import com.li.apicturebackend.manager.SpaceMediaGuard;
 import com.li.apicturebackend.model.dto.picture.CreatePictureOutPaintingTaskRequest;
 import com.li.apicturebackend.model.dto.picture.PictureEditRequest;
 import com.li.apicturebackend.model.dto.picture.PictureQueryRequest;
@@ -55,6 +56,9 @@ public class PictureController {
 
     @Resource
     private FileStorageManager fileStorageManager;
+
+    @Resource
+    private SpaceMediaGuard spaceMediaGuard;
 
     @Resource
     private UserService userService;
@@ -103,7 +107,11 @@ public class PictureController {
      * @return 图片文件
      */
     @PostMapping("/download")
-    public void downloadPicture(String key, HttpServletResponse response) throws IOException {
+    public void downloadPicture(String key, HttpServletRequest request, HttpServletResponse response) throws IOException {
+        if (SpaceMediaGuard.isPrivateKey(key) && !spaceMediaGuard.hasAccess(key, request)) {
+            writeNotFound(response);
+            return;
+        }
         try (InputStream objectContent = fileStorageManager.download(key)) {
             response.setContentType("application/octet-stream;charset=UTF-8");
             response.setHeader("Content-Disposition", "attachment; filename=\"" + key + "\"");
@@ -128,6 +136,12 @@ public class PictureController {
         ThrowUtils.throwIf(!uri.startsWith(prefix), ErrorCode.PARAMS_ERROR);
         String key = URLDecoder.decode(uri.substring(prefix.length()), StandardCharsets.UTF_8);
         ThrowUtils.throwIf(StrUtil.isBlank(key), ErrorCode.PARAMS_ERROR);
+        // 空间图片/视频在私密桶里，只有空间成员能读；失败按 404 返回，避免泄露对象是否存在
+        boolean privateObject = SpaceMediaGuard.isPrivateKey(key);
+        if (privateObject && !spaceMediaGuard.hasAccess(key, request)) {
+            writeNotFound(response);
+            return;
+        }
         try (InputStream inputStream = fileStorageManager.download(key)) {
             String lower = key.toLowerCase();
             if (lower.endsWith(".png")) response.setContentType("image/png");
@@ -137,12 +151,18 @@ public class PictureController {
             else if (lower.endsWith(".webm")) response.setContentType("video/webm");
             else if (lower.endsWith(".mov")) response.setContentType("video/quicktime");
             else response.setContentType("image/jpeg");
-            response.setHeader("Cache-Control", "public, max-age=86400");
+            if (privateObject) {
+                // 私密对象不进任何共享缓存，且必须带上会话 Cookie 才能取到
+                response.setHeader("Cache-Control", "private, no-store");
+                response.setHeader("Vary", "Cookie");
+            } else {
+                response.setHeader("Cache-Control", "public, max-age=86400");
+            }
             StreamUtils.copy(inputStream, response.getOutputStream());
             response.getOutputStream().flush();
         } catch (Exception e) {
             log.error("read picture file failed, key={}", key, e);
-            throw new BusinessException(ErrorCode.SYSTEM_ERROR, "读取图片失败");
+            writeImageError(response, "picture unavailable");
         }
     }
 
@@ -333,5 +353,47 @@ public class PictureController {
         ThrowUtils.throwIf(StrUtil.isBlank(taskId), ErrorCode.PARAMS_ERROR);
         GetOutPaintingTaskResponse task = aliYunAiApi.getOutPaintingTask(taskId);
         return Result.success(task);
+    }
+
+    /**
+     * 图片接口失败时返回非 200 的纯文本响应
+     * <p>
+     * 必须避免「HTTP 200 + JSON 错误体」：nginx 对这两个图片路径开了 proxy_cache，
+     * 只按状态码缓存，200 的错误体会被当成图片缓存 7~30 天，用户端长期坏图。
+     */
+    /**
+     * 私密对象无权访问时统一回 404：不返回 401/403，避免暴露对象是否存在
+     */
+    private static void writeNotFound(HttpServletResponse response) {
+        if (response.isCommitted()) {
+            return;
+        }
+        try {
+            response.reset();
+            response.setStatus(HttpServletResponse.SC_NOT_FOUND);
+            response.setContentType("text/plain;charset=UTF-8");
+            response.setHeader("Cache-Control", "no-store");
+            response.setHeader("Vary", "Cookie");
+            response.getWriter().write("not found");
+            response.flushBuffer();
+        } catch (Exception ignored) {
+            // 客户端已断开，忽略
+        }
+    }
+
+    private static void writeImageError(HttpServletResponse response, String message) {
+        if (response.isCommitted()) {
+            return;
+        }
+        try {
+            response.reset();
+            response.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
+            response.setContentType("text/plain;charset=UTF-8");
+            response.setHeader("Cache-Control", "no-store");
+            response.getWriter().write(message);
+            response.flushBuffer();
+        } catch (Exception ignored) {
+            // 客户端已断开，忽略
+        }
     }
 }

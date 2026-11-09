@@ -43,4 +43,14 @@ public interface FileStorageManager {
      * @return 访问地址前缀
      */
     String getHost();
+
+    /**
+     * 把对象键换成对外访问地址。公开对象是 CDN 绝对地址，私密对象是同源后端地址。
+     *
+     * @param key 对象键
+     * @return 访问地址
+     */
+    default String getUrl(String key) {
+        return getHost() + "/" + (key.startsWith("/") ? key.substring(1) : key);
+    }
 }

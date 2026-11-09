@@ -41,9 +41,14 @@ public class R2ClientConfig {
     private String secretAccessKey;
 
     /**
-     * 存储桶名称
+     * 存储桶名称（公开桶：公开图库的图片与视频）
      */
     private String bucketName;
+
+    /**
+     * 私密桶名称：空间图片/视频只进这里，桶上不绑任何公网域名，只能由后端带鉴权读
+     */
+    private String privateBucketName = "apic-space";
 
     /**
      * 公开访问地址（r2.dev 子域或自定义域名），对标 COS 的 host

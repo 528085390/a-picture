@@ -14,12 +14,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.multipart.MultipartFile;
 
 import javax.annotation.Resource;
-import javax.imageio.IIOImage;
 import javax.imageio.ImageIO;
-import javax.imageio.ImageWriteParam;
-import javax.imageio.ImageWriter;
-import javax.imageio.plugins.jpeg.JPEGImageWriteParam;
-import javax.imageio.stream.ImageOutputStream;
 import java.awt.Color;
 import java.awt.Graphics2D;
 import java.awt.RenderingHints;
@@ -56,7 +51,7 @@ public class FileManager {
             UploadPictureResult uploadPictureResult = new UploadPictureResult();
             uploadPictureResult.setPicName(FileUtil.mainName(originFilename));
             uploadPictureResult.setPicSize(FileUtil.size(file));
-            uploadPictureResult.setUrl(fileStorageManager.getHost() + "/" + uploadPath);
+            uploadPictureResult.setUrl(fileStorageManager.getUrl(uploadPath));
 
             // 上传图片并填充图片信息（COS 走万象服务，R2 走 JDK ImageIO）
             fileStorageManager.uploadPicture(uploadPath, file, uploadPictureResult);
@@ -81,17 +76,20 @@ public class FileManager {
     }
 
     /**
-     * 生成并上传压缩预览图
+     * 生成并上传压缩预览图，并顺带预生成各档缩略图
      */
     private void uploadPreview(String uploadPath, File sourceFile, UploadPictureResult result) {
         File previewFile = null;
         try {
             previewFile = File.createTempFile("preview_", ".jpg");
-            createPreview(sourceFile, previewFile);
+            BufferedImage previewImage = createPreviewImage(sourceFile);
+            ThumbnailManager.writeJpeg(previewImage, previewFile, PREVIEW_JPEG_QUALITY);
 
             String previewPath = getPreviewPath(uploadPath);
             fileStorageManager.upload(previewPath, previewFile);
-            result.setPreviewUrl(fileStorageManager.getHost() + "/" + previewPath);
+            result.setPreviewUrl(fileStorageManager.getUrl(previewPath));
+
+            uploadThumbnails(previewPath, previewImage);
         } catch (Exception e) {
             log.warn("生成或上传预览图失败，原图地址：{}", result.getUrl(), e);
         } finally {
@@ -100,49 +98,57 @@ public class FileManager {
     }
 
     /**
-     * 将图片按长边等比缩放并压缩为 JPEG，小图不放大
+     * 按固定档位预生成缩略图并上传，单档失败只记日志，不影响图片本身
      */
-    private void createPreview(File sourceFile, File previewFile) throws IOException {
+    private void uploadThumbnails(String previewPath, BufferedImage previewImage) {
+        int previewWidth = previewImage.getWidth();
+        for (int width : ThumbnailManager.WIDTHS) {
+            // 小图不放大：请求宽度不小于预览图宽度时前端直接用预览图
+            if (width >= previewWidth) {
+                continue;
+            }
+            File thumbFile = null;
+            try {
+                thumbFile = File.createTempFile("thumb_", ".jpg");
+                ThumbnailManager.writeJpeg(
+                        ThumbnailManager.downscale(previewImage, width), thumbFile, PREVIEW_JPEG_QUALITY);
+                fileStorageManager.upload(ThumbnailManager.thumbKey(previewPath, width), thumbFile);
+            } catch (Exception e) {
+                log.warn("生成缩略图失败，width={}，previewPath={}", width, previewPath, e);
+            } finally {
+                FileUtil.del(thumbFile);
+            }
+        }
+    }
+
+    /**
+     * 按长边等比缩放生成预览图，小图不放大
+     */
+    private BufferedImage createPreviewImage(File sourceFile) throws IOException {
         BufferedImage sourceImage = ImageIO.read(sourceFile);
         if (sourceImage == null) {
             throw new IOException("ImageIO 不支持该图片格式");
         }
-
         double scale = Math.min(1.0,
                 PREVIEW_MAX_SIDE / (double) Math.max(sourceImage.getWidth(), sourceImage.getHeight()));
         int previewWidth = Math.max(1, (int) Math.round(sourceImage.getWidth() * scale));
         int previewHeight = Math.max(1, (int) Math.round(sourceImage.getHeight() * scale));
         BufferedImage previewImage = new BufferedImage(
                 previewWidth, previewHeight, BufferedImage.TYPE_INT_RGB);
-
         Graphics2D graphics = previewImage.createGraphics();
         try {
             graphics.setColor(Color.WHITE);
             graphics.fillRect(0, 0, previewWidth, previewHeight);
             graphics.setRenderingHint(RenderingHints.KEY_INTERPOLATION,
                     RenderingHints.VALUE_INTERPOLATION_BICUBIC);
-            graphics.setRenderingHint(RenderingHints.KEY_RENDERING,
-                    RenderingHints.VALUE_RENDER_QUALITY);
-            graphics.setRenderingHint(RenderingHints.KEY_ANTIALIASING,
-                    RenderingHints.VALUE_ANTIALIAS_ON);
+            graphics.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
+            graphics.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
             graphics.drawImage(sourceImage, 0, 0, previewWidth, previewHeight, null);
         } finally {
             graphics.dispose();
             sourceImage.flush();
         }
-
-        ImageWriter writer = ImageIO.getImageWritersByFormatName("jpeg").next();
-        JPEGImageWriteParam writeParam = new JPEGImageWriteParam(null);
-        writeParam.setCompressionMode(ImageWriteParam.MODE_EXPLICIT);
-        writeParam.setCompressionQuality(PREVIEW_JPEG_QUALITY);
-        writeParam.setProgressiveMode(ImageWriteParam.MODE_DEFAULT);
-        try (ImageOutputStream outputStream = ImageIO.createImageOutputStream(previewFile)) {
-            writer.setOutput(outputStream);
-            writer.write(null, new IIOImage(previewImage, null, null), writeParam);
-        } finally {
-            writer.dispose();
-            previewImage.flush();
-        }
+        return previewImage;
     }
 
     /**
@@ -174,7 +180,7 @@ public class FileManager {
             fileStorageManager.upload(uploadPath, file);
             // 构建返回结果
             UploadLiveVideoResult uploadLiveVideoResult = new UploadLiveVideoResult();
-            uploadLiveVideoResult.setUrl(fileStorageManager.getHost() + "/" + uploadPath);
+            uploadLiveVideoResult.setUrl(fileStorageManager.getUrl(uploadPath));
             uploadLiveVideoResult.setVdoName(FileUtil.mainName(originFilename));
             return uploadLiveVideoResult;
 

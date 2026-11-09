@@ -37,9 +37,9 @@
 | --- | --- |
 | `app.jar` | Spring Boot fat jar |
 | `backend.Dockerfile` | 后端镜像，eclipse-temurin:11-jre-jammy |
-| `web/` | 前端 `dist/` 构建产物 |
+| `web/` | 前端 `dist/` 构建产物（含 `manifest.webmanifest`、`sw.js`、`icons/`、`splash/`） |
 | `web.Dockerfile` | Nginx 镜像 |
-| `nginx.conf` | SPA fallback + `/api` / WebSocket 反代 |
+| `nginx.conf` | SPA fallback + `/api` / WebSocket 反代；`/manifest.webmanifest` 强制 `application/manifest+json`，`/sw.js` 不缓存 |
 | `docker-compose.yml` | 四个服务编排 |
 | `application-prod.yml` | prod profile 配置 |
 | `initdb/` | 首次启动建表 + admin 种子 |
@@ -58,6 +58,11 @@ docker compose restart backend
 ```
 
 更新前端：本地 `npm run build`，把新的 `dist/` 覆盖到部署目录 `web/`，再执行 `docker compose up -d --build web`。
+
+前端构建产物是**打进镜像**的（`web.Dockerfile` 里 `COPY web/`，容器没有 bind mount），所以改完 `web/` 必须 `--build`，直接 `up -d` 不会生效。2026-11-06 的移动端 / PWA 版本就是这么发的，回滚材料在服务器 `/opt/a-picture/`：
+
+- `web.prev-mobile-20261105-1656/`、`nginx.conf.prev-mobile-20261105-1656`、镜像 tag `a-picture-web:prev-mobile-20261105-1656`（服务器时区为 UTC）；
+- 回滚：`rm -rf web && mv web.prev-mobile-20261105-1656 web && cp nginx.conf.prev-mobile-20261105-1656 nginx.conf && docker compose up -d --build web`。
 
 更新后端：替换 `app.jar` 或 `application-prod.yml`，再执行 `docker compose up -d --build backend`。
 
