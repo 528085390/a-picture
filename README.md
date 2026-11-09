@@ -6,7 +6,7 @@
 
 收藏光，也收藏光落下之后的寂静。
 
-[![在线演示](https://img.shields.io/badge/%E5%9C%A8%E7%BA%BF%E6%BC%94%E7%A4%BA-pic.raylx.xyz-c9a227?style=for-the-badge)](https://pic.raylx.xyz/)
+[![在线演示](https://img.shields.io/badge/%E5%9C%A8%E7%BA%BF%E6%BC%94%E7%A4%BA-demo.raylxpj.us.ci-c9a227?style=for-the-badge)](https://demo.raylxpj.us.ci/)
 
 ![Java](https://img.shields.io/badge/Java-11-e76f00?style=flat-square)
 ![Spring Boot](https://img.shields.io/badge/Spring%20Boot-2.7.6-6db33f?style=flat-square)
@@ -17,7 +17,7 @@
 ![Redis](https://img.shields.io/badge/Redis-8-dc382d?style=flat-square)
 ![Docker](https://img.shields.io/badge/Docker%20Compose-deploy-2496ed?style=flat-square)
 
-<a href="https://pic.raylx.xyz/"><img src="docs/screenshots/01-hero.jpg" width="880" alt="NOCTURNE 首页"></a>
+<a href="https://demo.raylxpj.us.ci/"><img src="docs/screenshots/01-hero.jpg" width="880" alt="NOCTURNE 首页"></a>
 
 </div>
 
@@ -34,11 +34,13 @@
 
 ## 在线演示
 
-**<https://pic.raylx.xyz/>**
+**<https://demo.raylxpj.us.ci/>**
 
-- 首页 / 图库 / 查看器：**无需登录**即可浏览（站点内置 1000 张示例影像）
-- 上传、收藏、团队空间、协同编辑：在 [登录页](https://pic.raylx.xyz/login) 注册一个账号即可
-- 演示环境跑在一台 ARM 云主机上，仅用于展示，请勿压测
+- **独立演示实例**：和作者自己在用的图册跑同一套代码，但容器、数据库、Redis、对象存储桶、域名全部独立——演示数据怎么折腾都不会碰到私人图册
+- 首页 / 图库 / 查看器：**无需登录**即可浏览（预置 180 张 Picsum 示例影像）
+- 上传、收藏、团队空间、协同编辑：在 [登录页](https://demo.raylxpj.us.ci/login) 注册一个账号即可试用
+- 每天 04:00（北京时间）自动重置回初始数据，注册和上传的内容不会长期保留
+- 跑在一台 ARM 云主机上，仅用于展示，请勿压测；这套演示实例的部署脚本见 [deploy/demo](deploy/demo/README.md)
 
 ## 界面预览
 
@@ -243,7 +245,7 @@ docker compose up -d --build   # 默认对外 8090 端口
 - AI 扩图需要自备阿里云百炼 API-KEY，且结果需手动保存入库。
 - 网格仍是全量 DOM（懒加载只控制图片下载与解码）；若在更弱的机器上累积上千张后掉帧，下一步是行虚拟化。
 - Live 图片功能代码完整，但演示站没有真实数据样本。
-- 演示站是单机部署，只用于展示，不做容量与并发承诺。
+- 演示实例是单机部署，只用于展示，不做容量与并发承诺；数据每晚重置，别当网盘用。
 
 ## 说明
 

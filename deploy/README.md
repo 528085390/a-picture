@@ -62,10 +62,11 @@ cp .env.example .env
 `initdb/02-admin.sql` 会在**数据卷为空时**写入一个 admin 账号：
 
 - 账号：`admin`
-- 口令：文件里的 MD5 是示例口令的哈希，**部署前请替换成自己的**：
+- 口令：`admin123456`（文件里存的是它对盐后的哈希，**部署前请替换成自己的**）
+- 注意后端存的是 `md5("apicture" + 明文)`，盐值写死在 `UserServiceImpl#getEncryptPassword`，所以哈希要这样算：
 
 ```bash
-printf '%s' '你的新密码' | md5sum   # 把结果填进 02-admin.sql 的 userPassword
+printf 'apicture%s' '你的新密码' | md5sum   # 把结果填进 02-admin.sql 的 userPassword
 ```
 
 > MySQL 只在数据卷为空时执行 `initdb/`。已经初始化过的话，改种子文件不会生效——请直接在「账号设置」里改密码，或删掉 `mysql-data` 卷重新初始化（会丢数据）。
@@ -131,7 +132,24 @@ server {
 
 - 业务数据在 MySQL 卷 `a-picture_mysql-data`，Session 在 Redis 卷 `a-picture_redis-data`；图片本体在对象存储。
 - 备份建议：容器内 `mysqldump` 一份 + 对象存储桶按需同步；恢复时删卷重建再导回。
-- 演示站预置了 1000 张随机示例图（Picsum Seeds，1600×1200，分类「示例」），生产库里的示例记录可以随时在后台删掉。
+
+
+## 演示实例（在线 demo）
+
+公开演示站 <https://demo.raylxpj.us.ci/> 是把同一套镜像再跑一份：容器名、数据卷、库、Redis、对象存储桶、域名全部独立，
+和生产实例共用一台机器即可。完整脚本在 [demo/](demo/README.md)：
+
+| 文件 | 用途 |
+| --- | --- |
+| `demo/docker-compose.demo.yml` | 演示实例编排（web 端口默认 8880） |
+| `demo/.env.demo.example` | 演示实例环境变量模板（独立库口令 + 独立桶） |
+| `demo/nginx.conf` | 容器内 Nginx：在生产版基础上加注册 / 上传限流 |
+| `demo/seed-demo.sh` | 从 Picsum 拉 1600×1200 示例图并走上传接口灌进演示库 |
+| `demo/make-snapshot.sh` | 打一份「干净状态」的数据库快照 |
+| `demo/reset-demo.sh` | 每日重置：恢复快照 → 清 Redis 会话 → 清孤儿对象 → 重启后端 |
+| `demo/r2-orphan-clean.py` | 删除数据库已无引用的对象（访客上传的图不会长年堆在桶里） |
+
+部署顺序：`up -d` → `seed-demo.sh` 灌示例图 → `make-snapshot.sh` → 把 `reset-demo.sh` 加进 crontab（每天 04:00）。
 
 ## 安全建议
 
