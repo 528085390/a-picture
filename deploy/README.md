@@ -1,87 +1,140 @@
-# NOCTURNE · 夜之馆 — Docker 部署
+# Docker 部署
 
-## 公网入口
-
-- 地址：<https://pic.raylx.xyz>
-- 服务器：os（demo-host，aarch64，Ubuntu）
-- 部署目录：`/opt/a-picture`
-- Compose 项目：`a-picture`
-
-生产站已预置 1000 张随机示例图片（Picsum Seeds，1600×1200）；管理员登录后可以继续上传、编辑和管理。公开图库无需登录。
-
-## 管理员
-
-- 账号：`admin`
-- 初始密码：见部署目录 `.env` 的 `ADMIN_PASSWORD`
-- 角色：`admin`
-
-建议登录后在「账号设置」里改密码，或在服务器上改 `.env` 后重建 admin 种子（仅首次初始化生效）。
-
-## 架构
+`deploy/` 是一套完整的单机部署：四个容器 + 两个数据卷，一条 `docker compose up -d --build` 起来。
 
 ```text
 浏览器
-  → https://pic.raylx.xyz
-  → a-picture-web (Nginx 1.27, 静态 SPA + /api 反代)
-  → a-picture-backend (Spring Boot 2.7.6, Java 11, 内部 8000, context /api)
-  → a-picture-mysql (MySQL 8.0)
-  → a-picture-redis (Redis 8, Spring Session)
-  → Cloudflare R2 (图片对象；bucket apic)
+  → Nginx（web 容器，对外 8090 · 静态 SPA + /api 反代 + 图片磁盘缓存）
+  → Spring Boot（backend 容器，内部 8000，context-path /api）
+  → MySQL 8（mysql 容器，数据卷 mysql-data）
+  → Redis 8（redis 容器，数据卷 redis-data，存 Session）
+  → 对象存储（Cloudflare R2 的公开桶 + 私密桶；也保留腾讯云 COS 实现）
 ```
 
-四个容器均设置 `restart: unless-stopped`，MySQL/Redis 使用 named volumes 持久化。
+四个服务都设了 `restart: unless-stopped`，MySQL / Redis 用 named volume 持久化。
 
 ## 文件
 
 | 文件 | 用途 |
 | --- | --- |
-| `app.jar` | Spring Boot fat jar |
-| `backend.Dockerfile` | 后端镜像，eclipse-temurin:11-jre-jammy |
-| `web/` | 前端 `dist/` 构建产物（含 `manifest.webmanifest`、`sw.js`、`icons/`、`splash/`） |
-| `web.Dockerfile` | Nginx 镜像 |
-| `nginx.conf` | SPA fallback + `/api` / WebSocket 反代；`/manifest.webmanifest` 强制 `application/manifest+json`，`/sw.js` 不缓存 |
-| `docker-compose.yml` | 四个服务编排 |
-| `application-prod.yml` | prod profile 配置 |
-| `initdb/` | 首次启动建表 + admin 种子 |
-| `.env` | 密码、R2/COS 凭证，权限 600 |
+| `backend.Dockerfile` | 后端镜像（`eclipse-temurin:11-jre`） |
+| `app.jar` | 后端 fat jar（构建产物，**不提交**） |
+| `web.Dockerfile` | 前端镜像（Nginx） |
+| `web/` | 前端 `dist/` 构建产物（含 `manifest.webmanifest`、`sw.js`、`icons/`、`splash/`，**不提交**） |
+| `nginx.conf` | SPA fallback、`/api` 与 WebSocket 反代、图片磁盘缓存、PWA 响应头 |
+| `docker-compose.yml` | 四服务编排 |
+| `application-prod.yml` | `prod` profile 配置（全部走环境变量） |
+| `initdb/01-schema.sql` | 首次启动建表 |
+| `initdb/02-admin.sql` | 首次启动写入 admin 种子账号 |
+| `.env.example` | 环境变量模板，复制成 `.env` 后填写 |
 
-## 运维命令
+## 准备产物
 
-在服务器上：
+仓库不提交 jar 与前端产物：
 
 ```bash
-cd /opt/a-picture
+# 后端
+mvn clean package -DskipTests
+cp target/a-picture-backend-0.0.1-SNAPSHOT.jar deploy/app.jar
+
+# 前端
+cd frontend && npm run build && cd ..
+rm -rf deploy/web && cp -r frontend/dist deploy/web
+```
+
+## 配置 .env
+
+```bash
+cd deploy
+cp .env.example .env
+```
+
+| 变量 | 说明 |
+| --- | --- |
+| `MYSQL_ROOT_PASSWORD` / `MYSQL_PASSWORD` | MySQL root 与业务账号（`apicture`）口令 |
+| `R2_ENDPOINT` / `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` / `R2_BUCKET_NAME` | R2 的 S3 兼容连接信息 |
+| `R2_PUBLIC_URL` | 公开桶绑定的自定义域名（图片 CDN 前缀） |
+| `COS_*` | 腾讯云 COS（可选，`file.storage.type` 切换后使用） |
+| `ALIYUN_AI_API_KEY` | 阿里云百炼 API-KEY，仅 AI 扩图需要 |
+
+## 管理员种子账号
+
+`initdb/02-admin.sql` 会在**数据卷为空时**写入一个 admin 账号：
+
+- 账号：`admin`
+- 口令：文件里的 MD5 是示例口令的哈希，**部署前请替换成自己的**：
+
+```bash
+printf '%s' '你的新密码' | md5sum   # 把结果填进 02-admin.sql 的 userPassword
+```
+
+> MySQL 只在数据卷为空时执行 `initdb/`。已经初始化过的话，改种子文件不会生效——请直接在「账号设置」里改密码，或删掉 `mysql-data` 卷重新初始化（会丢数据）。
+
+## 启动 / 运维
+
+```bash
+docker compose up -d --build
 docker compose ps
 docker compose logs -f backend
-docker compose up -d --build backend web
 docker compose restart backend
 ```
 
-更新前端：本地 `npm run build`，把新的 `dist/` 覆盖到部署目录 `web/`，再执行 `docker compose up -d --build web`。
+默认对外端口是 **8090**。
 
-前端构建产物是**打进镜像**的（`web.Dockerfile` 里 `COPY web/`，容器没有 bind mount），所以改完 `web/` 必须 `--build`，直接 `up -d` 不会生效。2026-11-06 的移动端 / PWA 版本就是这么发的，回滚材料在服务器 `/opt/a-picture/`：
+**更新前端**：产物是打进镜像的（`web.Dockerfile` 里 `COPY web/`，容器没有 bind mount），所以必须重新构建：
 
-- `web.prev-mobile-20261105-1656/`、`nginx.conf.prev-mobile-20261105-1656`、镜像 tag `a-picture-web:prev-mobile-20261105-1656`（服务器时区为 UTC）；
-- 回滚：`rm -rf web && mv web.prev-mobile-20261105-1656 web && cp nginx.conf.prev-mobile-20261105-1656 nginx.conf && docker compose up -d --build web`。
+```bash
+docker compose up -d --build web
+```
 
-更新后端：替换 `app.jar` 或 `application-prod.yml`，再执行 `docker compose up -d --build backend`。
+**更新后端**：替换 `app.jar` 或 `application-prod.yml`，然后 `docker compose up -d --build backend`。
 
-## 数据说明
+## 加域名 / TLS
 
-- 当前 MySQL `picture` 表有 1000 行示例记录：`随机示例-0001` … `随机示例-1000`，分类统一为 `示例`，尺寸 1600×1200。
-- 生产站公开图库 total=1000；示例图来自 `https://picsum.photos/seed/nocturne-sample-NNNN/1600/1200.jpg`。
-- 示例图片的原图与 preview 都存在 R2 bucket `apic`。R2 当前为 2138 个对象 / 430,796,890 bytes：原先 138 个旧对象（46,502,770 bytes，未删除）+ 1000 张示例原图 + 1000 张 preview。
-- 加示例前的旧对象清单：`r2-manifest-20261103.json`（key / size / lastModified / etag）；该清单只覆盖加示例前的 138 个对象。
-- **没有删除 R2 里的旧原图**；本机开发库也没有改动。如果确认要连 R2 原图一起删除，这是不可恢复操作，需要另行确认后执行。
-- MySQL/Redis 数据在 Docker named volumes：`a-picture_mysql-data`、`a-picture_redis-data`。
+前端容器自己只监听 HTTP 8090。要给站点挂域名和证书，标准做法是在宿主机上再放一层 Nginx（或用 Caddy / Cloudflare Tunnel）：
 
-## 网络与安全
+```nginx
+server {
+    listen 443 ssl http2;
+    server_name example.com;
 
-- 服务器本机 iptables 已新增 `8090/tcp` 放行，并通过 `netfilter-persistent save` 持久化；改动前备份在 `/etc/iptables/rules.v4.bak-apicture-*`。
-- OCI VCN Default Security List 已新增 `0.0.0.0/0 → 8090/tcp` ingress；改动前快照在 `oci-security-list-before-8090.json`。
-- 没有改动机器上已有的 80/443/8080/8088/8443 端口、Nginx 站点、sing-box 或证书配置。
-- 当前是 HTTP；登录态会经明文传输，正式使用建议加域名 + TLS。
+    ssl_certificate     /path/to/fullchain.pem;
+    ssl_certificate_key /path/to/privkey.pem;
 
-## 首次初始化
+    client_max_body_size 12m;
 
-MySQL 只在数据卷为空时执行 `initdb/`。如果删掉 `mysql-data` 卷再启动，会重新建表并写入 admin 种子。
+    location / {
+        proxy_pass http://127.0.0.1:8090;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header Upgrade $http_upgrade;      # 协同编辑的 WebSocket
+        proxy_set_header Connection "upgrade";
+        proxy_read_timeout 300s;
+        proxy_send_timeout 300s;
+    }
+}
+```
+
+> 反代这一层要放开 `client_max_body_size`（后端 upload 限制 10 MB），并保留 Upgrade 头，否则 `/api/ws/picture/edit` 会握手失败。
+
+## 容器内 Nginx 做了什么
+
+- SPA fallback：非文件请求回 `index.html`
+- `/api/` 反代到 `backend:8000`；`/api/ws/` 升级为 WebSocket（读写超时 3600 s）
+- 图片磁盘缓存 `/var/cache/nginx/img`（`keys_zone=img_cache:200m`、上限 6 GB）：`= /api/picture/thumb` 缓存 7 天，`^~ /api/picture/file/` 缓存 30 天；私密空间对象（`space/` 前缀）**不缓存**，响应头带 `no-store` / `Vary: Cookie`
+- gzip 文本资源；`manifest.webmanifest` 强制 `application/manifest+json`，`sw.js` 不缓存
+
+## 数据
+
+- 业务数据在 MySQL 卷 `a-picture_mysql-data`，Session 在 Redis 卷 `a-picture_redis-data`；图片本体在对象存储。
+- 备份建议：容器内 `mysqldump` 一份 + 对象存储桶按需同步；恢复时删卷重建再导回。
+- 演示站预置了 1000 张随机示例图（Picsum Seeds，1600×1200，分类「示例」），生产库里的示例记录可以随时在后台删掉。
+
+## 安全建议
+
+- `.env` 权限收到 `600`，不要提交仓库；`deploy/.gitignore` 已忽略 `.env`、`app.jar`、`web/`。
+- 首次部署后立刻改掉 admin 的示例口令。
+- 只对需要的端口开放安全组 / 防火墙规则；8090 若不需要直接暴露，可只允许本机反代访问。
